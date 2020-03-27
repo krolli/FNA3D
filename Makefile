@@ -36,7 +36,7 @@ DEFINES += -DFNA3D_DRIVER_OPENGL
 DEFINES += -DFNA3D_DRIVER_VULKAN
 
 # Includes/Libraries
-INCLUDES = -Iinclude -IMojoShader `sdl2-config --cflags`
+INCLUDES = -Iinclude -IMojoShader -IVulkan-Headers/include/vulkan `sdl2-config --cflags`
 DEPENDENCIES = `sdl2-config --libs`
 
 # MojoShader Configuration
