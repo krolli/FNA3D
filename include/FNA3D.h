@@ -317,59 +317,59 @@ typedef struct FNA3D_Viewport
 
 typedef struct FNA3D_BlendState
 {
-	FNA3D_Color blendColor;
-	int32_t multiSampleMask;
-	FNA3D_BlendFunction blendFunc;
-	FNA3D_BlendFunction blendFuncAlpha;
-	FNA3D_Blend srcBlend;
-	FNA3D_Blend dstBlend;
-	FNA3D_Blend srcBlendAlpha;
-	FNA3D_Blend dstBlendAlpha;
+	FNA3D_Blend colorSourceBlend;
+	FNA3D_Blend colorDestinationBlend;
+	FNA3D_BlendFunction colorBlendFunction;
+	FNA3D_Blend alphaSourceBlend;
+	FNA3D_Blend alphaDestinationBlend;
+	FNA3D_BlendFunction alphaBlendFunction;
 	FNA3D_ColorWriteChannels colorWriteEnable;
 	FNA3D_ColorWriteChannels colorWriteEnable1;
 	FNA3D_ColorWriteChannels colorWriteEnable2;
 	FNA3D_ColorWriteChannels colorWriteEnable3;
+	FNA3D_Color blendFactor;
+	int32_t multiSampleMask;
 } FNA3D_BlendState;
 
 typedef struct FNA3D_DepthStencilState
 {
-	uint8_t zEnable;
-	uint8_t zWriteEnable;
-	FNA3D_CompareFunction depthFunc;
+	uint8_t depthBufferEnable;
+	uint8_t depthBufferWriteEnable;
+	FNA3D_CompareFunction depthBufferFunction;
 	uint8_t stencilEnable;
-	int32_t stencilWriteMask;
-	uint8_t separateStencilEnable;
-	int32_t stencilRef;
 	int32_t stencilMask;
-	FNA3D_CompareFunction stencilFunc;
+	int32_t stencilWriteMask;
+	uint8_t twoSidedStencilMode;
 	FNA3D_StencilOperation stencilFail;
-	FNA3D_StencilOperation stencilZFail;
+	FNA3D_StencilOperation stencilDepthBufferFail;
 	FNA3D_StencilOperation stencilPass;
-	FNA3D_CompareFunction ccwStencilFunc;
+	FNA3D_CompareFunction stencilFunction;
 	FNA3D_StencilOperation ccwStencilFail;
-	FNA3D_StencilOperation ccwStencilZFail;
+	FNA3D_StencilOperation ccwStencilDepthBufferFail;
 	FNA3D_StencilOperation ccwStencilPass;
+	FNA3D_CompareFunction ccwStencilFunction;
+	int32_t referenceStencil;
 } FNA3D_DepthStencilState;
 
 typedef struct FNA3D_RasterizerState
 {
-	uint8_t scissorTestEnable;
-	FNA3D_CullMode cullMode;
 	FNA3D_FillMode fillMode;
+	FNA3D_CullMode cullMode;
 	float depthBias;
 	float slopeScaleDepthBias;
-	uint8_t multiSampleEnable;
+	uint8_t scissorTestEnable;
+	uint8_t multiSampleAntiAlias;
 } FNA3D_RasterizerState;
 
 typedef struct FNA3D_SamplerState
 {
+	FNA3D_TextureFilter filter;
 	FNA3D_TextureAddressMode addressU;
 	FNA3D_TextureAddressMode addressV;
 	FNA3D_TextureAddressMode addressW;
-	FNA3D_TextureFilter filter;
+	float mipMapLevelOfDetailBias;
 	int32_t maxAnisotropy;
 	int32_t maxMipLevel;
-	float mipMapLevelOfDetailBias;
 } FNA3D_SamplerState;
 
 typedef struct FNA3D_VertexElement
@@ -387,6 +387,14 @@ typedef struct FNA3D_VertexDeclaration
 	FNA3D_VertexElement *elements;
 } FNA3D_VertexDeclaration;
 
+typedef struct FNA3D_VertexBufferBinding
+{
+	FNA3D_Buffer *vertexBuffer;
+	FNA3D_VertexDeclaration vertexDeclaration;
+	int32_t vertexOffset;
+	int32_t instanceFrequency;
+} FNA3D_VertexBufferBinding;
+
 typedef struct FNA3D_PresentationParameters
 {
 	int32_t backBufferWidth;
@@ -400,6 +408,30 @@ typedef struct FNA3D_PresentationParameters
 	FNA3D_DisplayOrientation displayOrientation;
 	FNA3D_RenderTargetUsage renderTargetUsage;
 } FNA3D_PresentationParameters;
+
+typedef struct FNA3D_RenderTargetBinding
+{
+	/* FNA3D */
+	#define RENDERTARGET_TYPE_2D 0
+	#define RENDERTARGET_TYPE_CUBE 1
+	uint8_t type;
+
+	/* Texture */
+	FNA3D_SurfaceFormat format;
+	int32_t levelCount;
+	FNA3D_Texture *texture;
+
+	/* IRenderTarget */
+	int32_t width;
+	int32_t height;
+	FNA3D_RenderTargetUsage renderTargetUsage;
+	FNA3D_Renderbuffer *colorBuffer;
+	FNA3D_DepthFormat depthStencilFormat;
+	int32_t multiSampleCount;
+
+	/* RenderTargetBinding */
+	FNA3D_CubeMapFace cubeMapFace;
+} FNA3D_RenderTargetBinding;
 
 /* Functions */
 
@@ -540,7 +572,7 @@ FNA3DAPI void FNA3D_VerifySampler(
 
 FNA3DAPI void FNA3D_ApplyVertexBufferBindings(
 	FNA3D_Device *device,
-	/* FIXME: Oh shit VertexBufferBinding[] bindings, */
+	FNA3D_VertexBufferBinding *bindings,
 	int32_t numBindings,
 	uint8_t bindingsUpdated,
 	int32_t baseVertex
@@ -557,14 +589,15 @@ FNA3DAPI void FNA3D_ApplyVertexDeclaration(
 
 FNA3DAPI void FNA3D_SetRenderTargets(
 	FNA3D_Device *device,
-	/* FIXME: Oh shit RenderTargetBinding[] renderTargets, */
+	FNA3D_RenderTargetBinding *renderTargets,
+	int32_t numRenderTargets,
 	FNA3D_Renderbuffer *renderbuffer,
 	FNA3D_DepthFormat depthFormat
 );
 
 FNA3DAPI void FNA3D_ResolveTarget(
-	FNA3D_Device *device
-	/* FIXME: Oh shit RenderTargetBinding target */
+	FNA3D_Device *device,
+	FNA3D_RenderTargetBinding *target
 );
 
 /* Backbuffer Functions */
@@ -820,7 +853,8 @@ typedef struct MOJOSHADER_effectStateChanges MOJOSHADER_effectStateChanges;
 
 FNA3DAPI FNA3D_Effect* FNA3D_CreateEffect(
 	FNA3D_Device *device,
-	uint8_t *effectCode
+	uint8_t *effectCode,
+	uint32_t effectCodeLength
 );
 FNA3DAPI FNA3D_Effect* FNA3D_CloneEffect(
 	FNA3D_Device *device,
@@ -894,3 +928,5 @@ FNA3DAPI MOJOSHADER_effect* FNA3D_GetEffectData(
 #endif /* __cplusplus */
 
 #endif /* FNA3D_H */
+
+/* vim: set noexpandtab shiftwidth=8 tabstop=8: */

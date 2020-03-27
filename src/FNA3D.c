@@ -443,7 +443,7 @@ void FNA3D_VerifySampler(
 
 void FNA3D_ApplyVertexBufferBindings(
 	FNA3D_Device *device,
-	/* FIXME: Oh shit VertexBufferBinding[] bindings, */
+	FNA3D_VertexBufferBinding *bindings,
 	int32_t numBindings,
 	uint8_t bindingsUpdated,
 	int32_t baseVertex
@@ -454,6 +454,7 @@ void FNA3D_ApplyVertexBufferBindings(
 	}
 	device->ApplyVertexBufferBindings(
 		device->driverData,
+		bindings,
 		numBindings,
 		bindingsUpdated,
 		baseVertex
@@ -482,7 +483,8 @@ void FNA3D_ApplyVertexDeclaration(
 
 void FNA3D_SetRenderTargets(
 	FNA3D_Device *device,
-	/* FIXME: Oh shit RenderTargetBinding[] renderTargets, */
+	FNA3D_RenderTargetBinding *renderTargets,
+	int32_t numRenderTargets,
 	FNA3D_Renderbuffer *renderbuffer,
 	FNA3D_DepthFormat depthFormat
 ) {
@@ -492,20 +494,22 @@ void FNA3D_SetRenderTargets(
 	}
 	device->SetRenderTargets(
 		device->driverData,
+		renderTargets,
+		numRenderTargets,
 		renderbuffer,
 		depthFormat
 	);
 }
 
 void FNA3D_ResolveTarget(
-	FNA3D_Device *device
-	/* FIXME: Oh shit RenderTargetBinding target */
+	FNA3D_Device *device,
+	FNA3D_RenderTargetBinding *target
 ) {
 	if (device == NULL)
 	{
 		return;
 	}
-	device->ResolveTarget(device->driverData);
+	device->ResolveTarget(device->driverData, target);
 }
 
 /* Backbuffer Functions */
@@ -1117,13 +1121,18 @@ void FNA3D_GetIndexBufferData(
 
 FNA3D_Effect* FNA3D_CreateEffect(
 	FNA3D_Device *device,
-	uint8_t *effectCode
+	uint8_t *effectCode,
+	uint32_t effectCodeLength
 ) {
 	if (device == NULL)
 	{
 		return NULL;
 	}
-	return device->CreateEffect(device->driverData, effectCode);
+	return device->CreateEffect(
+		device->driverData,
+		effectCode,
+		effectCodeLength
+	);
 }
 
 FNA3D_Effect* FNA3D_CloneEffect(
@@ -1347,3 +1356,5 @@ MOJOSHADER_effect* FNA3D_GetEffectData(
 	}
 	return device->GetEffectData(effect);
 }
+
+/* vim: set noexpandtab shiftwidth=8 tabstop=8: */

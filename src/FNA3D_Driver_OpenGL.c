@@ -50,22 +50,23 @@ typedef struct OpenGLTexture /* Cast from FNA3D_Texture* */
 
 static OpenGLTexture NullTexture =
 {
-	.handle = 0,
-	.target = GL_TEXTURE_2D,
-	.hasMipmaps = 0,
-	.wrapS = FNA3D_TEXTUREADDRESSMODE_WRAP,
-	.wrapT = FNA3D_TEXTUREADDRESSMODE_WRAP,
-	.wrapR = FNA3D_TEXTUREADDRESSMODE_WRAP,
-	.filter = FNA3D_TEXTUREFILTER_LINEAR,
-	.anisotropy = 0,
-	.maxMipmapLevel = 0,
-	.lodBias = 0
+	0,
+	GL_TEXTURE_2D,
+	0,
+	FNA3D_TEXTUREADDRESSMODE_WRAP,
+	FNA3D_TEXTUREADDRESSMODE_WRAP,
+	FNA3D_TEXTUREADDRESSMODE_WRAP,
+	FNA3D_TEXTUREFILTER_LINEAR,
+	0,
+	0,
+	0
 };
 
 typedef struct OpenGLBuffer /* Cast from FNA3D_Buffer* */
 {
 	GLuint handle;
 	intptr_t size;
+	GLenum dynamic;
 } OpenGLBuffer;
 
 typedef struct OpenGLRenderbuffer /* Cast from FNA3D_Renderbuffer* */
@@ -129,9 +130,6 @@ typedef struct OpenGLDevice /* Cast from driverData */
 	GLuint vao;
 
 	/* Capabilities */
-	/* TODO: Check these...
-	 * - ARB_invalidate_subdata for InvalidateFramebuffer
-	 */
 	uint8_t supports_BaseGL;
 	uint8_t supports_CoreGL;
 	uint8_t supports_3DTexture;
@@ -212,7 +210,7 @@ typedef struct OpenGLDevice /* Cast from driverData */
 
 	/* ld, or LastDrawn, effect/vertex attributes */
 	int32_t ldBaseVertex;
-	FNA3D_VertexDeclaration ldVertexDeclaration;
+	FNA3D_VertexDeclaration *ldVertexDeclaration;
 	void* ldPointer;
 	MOJOSHADER_glEffect *ldEffect;
 	MOJOSHADER_effectTechnique *ldTechnique;
@@ -912,7 +910,7 @@ void OPENGL_SetPresentationInterval(
 	FNA3D_PresentInterval presentInterval
 ) {
 	const char *osVersion;
-	int disableLateSwapTear;
+	int32_t disableLateSwapTear;
 
 	if (	presentInterval == FNA3D_PRESENTINTERVAL_DEFAULT ||
 		presentInterval == FNA3D_PRESENTINTERVAL_ONE	)
@@ -1302,7 +1300,7 @@ void OPENGL_GetBackbufferSize(void*, int*, int*);
 void OPENGL_SetViewport(void* driverData, FNA3D_Viewport *viewport)
 {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
-	int bbw, bbh;
+	int32_t bbw, bbh;
 
 	/* Flip viewport when target is not bound */
 	if (!device->renderTargetBound)
@@ -1351,7 +1349,7 @@ void OPENGL_SetViewport(void* driverData, FNA3D_Viewport *viewport)
 void OPENGL_SetScissorRect(void* driverData, FNA3D_Rect *scissor)
 {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
-	int bbw, bbh;
+	int32_t bbw, bbh;
 
 	/* Flip rectangle when target is not bound */
 	if (!device->renderTargetBound)
@@ -1482,11 +1480,11 @@ void OPENGL_SetBlendState(
 ) {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
 
-	uint8_t newEnable = (
-		!(	blendState->srcBlend == FNA3D_BLEND_ONE &&
-			blendState->dstBlend == FNA3D_BLEND_ZERO &&
-			blendState->srcBlendAlpha == FNA3D_BLEND_ONE &&
-			blendState->dstBlendAlpha == FNA3D_BLEND_ZERO	)
+	uint8_t newEnable = !(
+		blendState->colorSourceBlend == FNA3D_BLEND_ONE &&
+		blendState->colorDestinationBlend == FNA3D_BLEND_ZERO &&
+		blendState->alphaSourceBlend == FNA3D_BLEND_ONE &&
+		blendState->alphaDestinationBlend == FNA3D_BLEND_ZERO
 	);
 
 	if (newEnable != device->alphaBlendEnable)
@@ -1497,12 +1495,12 @@ void OPENGL_SetBlendState(
 
 	if (device->alphaBlendEnable)
 	{
-		if (	blendState->blendColor.r != device->blendColor.r ||
-			blendState->blendColor.g != device->blendColor.g ||
-			blendState->blendColor.b != device->blendColor.b ||
-			blendState->blendColor.a != device->blendColor.a	)
+		if (	blendState->blendFactor.r != device->blendColor.r ||
+			blendState->blendFactor.g != device->blendColor.g ||
+			blendState->blendFactor.b != device->blendColor.b ||
+			blendState->blendFactor.a != device->blendColor.a	)
 		{
-			device->blendColor = blendState->blendColor;
+			device->blendColor = blendState->blendFactor;
 			device->glBlendColor(
 				device->blendColor.r / 255.0f,
 				device->blendColor.g / 255.0f,
@@ -1511,15 +1509,15 @@ void OPENGL_SetBlendState(
 			);
 		}
 
-		if (	blendState->srcBlend != device->srcBlend ||
-			blendState->dstBlend != device->dstBlend ||
-			blendState->srcBlendAlpha != device->srcBlendAlpha ||
-			blendState->dstBlendAlpha != device->dstBlendAlpha	)
+		if (	blendState->colorSourceBlend != device->srcBlend ||
+			blendState->colorDestinationBlend != device->dstBlend ||
+			blendState->alphaSourceBlend != device->srcBlendAlpha ||
+			blendState->alphaDestinationBlend != device->dstBlendAlpha	)
 		{
-			device->srcBlend = blendState->srcBlend;
-			device->dstBlend = blendState->dstBlend;
-			device->srcBlendAlpha = blendState->srcBlendAlpha;
-			device->dstBlendAlpha = blendState->dstBlendAlpha;
+			device->srcBlend = blendState->colorSourceBlend;
+			device->dstBlend = blendState->colorDestinationBlend;
+			device->srcBlendAlpha = blendState->alphaSourceBlend;
+			device->dstBlendAlpha = blendState->alphaDestinationBlend;
 			device->glBlendFuncSeparate(
 				XNAToGL_BlendMode[device->srcBlend],
 				XNAToGL_BlendMode[device->dstBlend],
@@ -1528,11 +1526,11 @@ void OPENGL_SetBlendState(
 			);
 		}
 
-		if (	blendState->blendFunc != device->blendOp ||
-			blendState->blendFuncAlpha != device->blendOpAlpha	)
+		if (	blendState->colorBlendFunction != device->blendOp ||
+			blendState->alphaBlendFunction != device->blendOpAlpha	)
 		{
-			device->blendOp = blendState->blendFunc;
-			device->blendOpAlpha = blendState->blendFuncAlpha;
+			device->blendOp = blendState->colorBlendFunction;
+			device->blendOpAlpha = blendState->alphaBlendFunction;
 			device->glBlendEquationSeparate(
 				XNAToGL_BlendEquation[device->blendOp],
 				XNAToGL_BlendEquation[device->blendOpAlpha]
@@ -1606,7 +1604,7 @@ void OPENGL_SetBlendState(
 				device->glEnable(GL_SAMPLE_MASK);
 			}
 			/* FIXME: index...? -flibit */
-			device->glSampleMaski(0, (uint32_t)blendState->multiSampleMask);
+			device->glSampleMaski(0, (uint32_t) blendState->multiSampleMask);
 		}
 		device->multiSampleMask = blendState->multiSampleMask;
 	}
@@ -1618,23 +1616,23 @@ void OPENGL_SetDepthStencilState(
 ) {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
 
-	if (depthStencilState->zEnable != device->zEnable)
+	if (depthStencilState->depthBufferEnable != device->zEnable)
 	{
-		device->zEnable = depthStencilState->zEnable;
+		device->zEnable = depthStencilState->depthBufferEnable;
 		ToggleGLState(device, GL_DEPTH_TEST, device->zEnable);
 	}
 
 	if (device->zEnable)
 	{
-		if (depthStencilState->zWriteEnable != device->zWriteEnable)
+		if (depthStencilState->depthBufferWriteEnable != device->zWriteEnable)
 		{
-			device->zWriteEnable = depthStencilState->zWriteEnable;
+			device->zWriteEnable = depthStencilState->depthBufferWriteEnable;
 			device->glDepthMask(device->zWriteEnable);
 		}
 
-		if (depthStencilState->depthFunc != device->depthFunc)
+		if (depthStencilState->depthBufferFunction != device->depthFunc)
 		{
-			device->depthFunc = depthStencilState->depthFunc;
+			device->depthFunc = depthStencilState->depthBufferFunction;
 			device->glDepthFunc(XNAToGL_CompareFunc[device->depthFunc]);
 		}
 	}
@@ -1654,30 +1652,30 @@ void OPENGL_SetDepthStencilState(
 		}
 
 		/* TODO: Can we split up StencilFunc/StencilOp nicely? -flibit */
-		if (	depthStencilState->separateStencilEnable != device->separateStencilEnable ||
-			depthStencilState->stencilRef != device->stencilRef ||
+		if (	depthStencilState->twoSidedStencilMode != device->separateStencilEnable ||
+			depthStencilState->referenceStencil != device->stencilRef ||
 			depthStencilState->stencilMask != device->stencilMask ||
-			depthStencilState->stencilFunc != device->stencilFunc ||
-			depthStencilState->ccwStencilFunc != device->ccwStencilFunc ||
+			depthStencilState->stencilFunction != device->stencilFunc ||
+			depthStencilState->ccwStencilFunction != device->ccwStencilFunc ||
 			depthStencilState->stencilFail != device->stencilFail ||
-			depthStencilState->stencilZFail != device->stencilZFail ||
+			depthStencilState->stencilDepthBufferFail != device->stencilZFail ||
 			depthStencilState->stencilPass != device->stencilPass ||
 			depthStencilState->ccwStencilFail != device->ccwStencilFail ||
-			depthStencilState->ccwStencilZFail != device->ccwStencilZFail ||
-			depthStencilState->ccwStencilPass != device->ccwStencilPass	)
+			depthStencilState->ccwStencilDepthBufferFail != device->ccwStencilZFail ||
+			depthStencilState->ccwStencilPass != device->ccwStencilPass			)
 		{
-			device->separateStencilEnable = depthStencilState->separateStencilEnable;
-			device->stencilRef = depthStencilState->stencilRef;
+			device->separateStencilEnable = depthStencilState->twoSidedStencilMode;
+			device->stencilRef = depthStencilState->referenceStencil;
 			device->stencilMask = depthStencilState->stencilMask;
-			device->stencilFunc = depthStencilState->stencilFunc;
+			device->stencilFunc = depthStencilState->stencilFunction;
 			device->stencilFail = depthStencilState->stencilFail;
-			device->stencilZFail = depthStencilState->stencilZFail;
+			device->stencilZFail = depthStencilState->stencilDepthBufferFail;
 			device->stencilPass = depthStencilState->stencilPass;
 			if (device->separateStencilEnable)
 			{
-				device->ccwStencilFunc = depthStencilState->ccwStencilFunc;
+				device->ccwStencilFunc = depthStencilState->ccwStencilFunction;
 				device->ccwStencilFail = depthStencilState->ccwStencilFail;
-				device->ccwStencilZFail = depthStencilState->ccwStencilZFail;
+				device->ccwStencilZFail = depthStencilState->ccwStencilDepthBufferFail;
 				device->ccwStencilPass = depthStencilState->ccwStencilPass;
 				device->glStencilFuncSeparate(
 					GL_FRONT,
@@ -1821,9 +1819,9 @@ void OPENGL_ApplyRasterizerState(
 	 * tell them to install Linux. Yes, really.
 	 * -flibit
 	 */
-	if (rasterizerState->multiSampleEnable != device->multiSampleEnable)
+	if (rasterizerState->multiSampleAntiAlias != device->multiSampleEnable)
 	{
-		device->multiSampleEnable = rasterizerState->multiSampleEnable;
+		device->multiSampleEnable = rasterizerState->multiSampleAntiAlias;
 		ToggleGLState(device, GL_MULTISAMPLE, device->multiSampleEnable);
 	}
 }
@@ -1834,7 +1832,8 @@ void OPENGL_VerifySampler(
 	FNA3D_Texture *texture,
 	FNA3D_SamplerState *sampler
 ) {
-	OpenGLDevice* device = (OpenGLDevice*)driverData;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLTexture *tex = (OpenGLTexture*) texture;
 
 	if (texture == NULL)
 	{
@@ -1854,8 +1853,6 @@ void OPENGL_VerifySampler(
 		}
 		return;
 	}
-
-	OpenGLTexture* tex = (OpenGLTexture*)texture;
 
 	if (	tex == device->textures[index] &&
 		sampler->addressU == tex->wrapS &&
@@ -1916,11 +1913,11 @@ void OPENGL_VerifySampler(
 			XNAToGL_Wrap[tex->wrapR]
 		);
 	}
-	if (sampler->filter != tex->filter ||
-		sampler->maxAnisotropy != tex->anisotropy)
+	if (	sampler->filter != tex->filter ||
+		sampler->maxAnisotropy != tex->anisotropy	)
 	{
 		tex->filter = sampler->filter;
-		tex->anisotropy = sampler->maxAnisotropy;
+		tex->anisotropy = (float) sampler->maxAnisotropy;
 		device->glTexParameteri(
 			tex->target,
 			GL_TEXTURE_MAG_FILTER,
@@ -1969,16 +1966,162 @@ void OPENGL_VerifySampler(
 
 /* Vertex State */
 
+static void OPENGL_INTERNAL_FlushGLVertexAttributes(OpenGLDevice *device)
+{
+	int32_t i, divisor;
+	for (i = 0; i < device->numVertexAttributes; i += 1)
+	{
+		if (device->attributeEnabled[i])
+		{
+			device->attributeEnabled[i] = 0;
+			if (!device->previousAttributeEnabled[i])
+			{
+				device->glEnableVertexAttribArray(i);
+				device->previousAttributeEnabled[i] = 1;
+			}
+		}
+		else if (device->previousAttributeEnabled[i])
+		{
+			device->glDisableVertexAttribArray(i);
+			device->previousAttributeEnabled[i] = 0;
+		}
+
+		divisor = device->attributeDivisor[i];
+		if (divisor != device->previousAttributeDivisor[i])
+		{
+			device->glVertexAttribDivisor(i, divisor);
+			device->previousAttributeDivisor[i] = divisor;
+		}
+	}
+}
+
 void OPENGL_ApplyVertexBufferBindings(
 	void* driverData,
-	/* FIXME: Oh shit VertexBufferBinding[] bindings, */
+	FNA3D_VertexBufferBinding *bindings,
 	int32_t numBindings,
 	uint8_t bindingsUpdated,
 	int32_t baseVertex
 ) {
-	/* TODO */
+	uint8_t *basePtr, *ptr;
+	uint8_t normalized;
+	int32_t i, j, k;
+	int32_t usage, index, attribLoc;
+	FNA3D_VertexElement *element;
+	FNA3D_VertexDeclaration *vertexDeclaration;
+	OpenGLVertexAttribute *attr;
+	OpenGLBuffer *buffer;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
-	SDL_assert(device->supports_ARB_instanced_arrays); /* If divisor > 0 */
+
+	if (device->supports_ARB_draw_elements_base_vertex)
+	{
+		baseVertex = 0;
+	}
+
+	if (	bindingsUpdated ||
+		baseVertex != device->ldBaseVertex ||
+		device->currentEffect != device->ldEffect ||
+		device->currentTechnique != device->ldTechnique ||
+		device->currentPass != device->ldPass ||
+		device->effectApplied	)
+	{
+		/* There's this weird case where you can have overlapping
+		 * vertex usage/index combinations. It seems like the first
+		 * attrib gets priority, so whenever a duplicate attribute
+		 * exists, give it the next available index. If that fails, we
+		 * have to crash :/
+		 * -flibit
+		 */
+		SDL_memset(device->attrUse, '\0', sizeof(device->attrUse));
+		for (i = 0; i < numBindings; i += 1)
+		{
+			buffer = (OpenGLBuffer*) bindings[i].vertexBuffer;
+			BindVertexBuffer(device, buffer->handle);
+			vertexDeclaration = &bindings[i].vertexDeclaration;
+			basePtr = (uint8_t*) (size_t) (
+				vertexDeclaration->vertexStride *
+				(bindings[i].vertexOffset + baseVertex)
+			);
+			for (j = 0; j < vertexDeclaration->elementCount; j += 1)
+			{
+				element = &vertexDeclaration->elements[j];
+				usage = element->vertexElementUsage;
+				index = element->usageIndex;
+				if (device->attrUse[usage][index])
+				{
+					index = -1;
+					for (k = 0; k < 16; k += 1)
+					{
+						if (!device->attrUse[usage][k])
+						{
+							index = k;
+							break;
+						}
+					}
+					if (index < 0)
+					{
+						SDL_LogError(
+							SDL_LOG_CATEGORY_APPLICATION,
+							"Vertex usage collision!"
+						);
+					}
+				}
+				device->attrUse[usage][index] = 1;
+				attribLoc = MOJOSHADER_glGetVertexAttribLocation(
+					XNAToGL_VertexAttribUsage[usage],
+					index
+				);
+				if (attribLoc == -1)
+				{
+					/* Stream not in use! */
+					continue;
+				}
+				device->attributeEnabled[attribLoc] = 1;
+				attr = &device->attributes[attribLoc];
+				ptr = basePtr + element->offset;
+				normalized = XNAToGL_VertexAttribNormalized(element);
+				if (	attr->currentBuffer != buffer->handle ||
+					attr->currentPointer != ptr ||
+					attr->currentFormat != element->vertexElementFormat ||
+					attr->currentNormalized != normalized ||
+					attr->currentStride != vertexDeclaration->vertexStride	)
+				{
+					device->glVertexAttribPointer(
+						attribLoc,
+						XNAToGL_VertexAttribSize[element->vertexElementFormat],
+						XNAToGL_VertexAttribType[element->vertexElementFormat],
+						normalized,
+						vertexDeclaration->vertexStride,
+						ptr
+					);
+					attr->currentBuffer = buffer->handle;
+					attr->currentPointer = ptr;
+					attr->currentFormat = element->vertexElementFormat;
+					attr->currentNormalized = normalized;
+					attr->currentStride = vertexDeclaration->vertexStride;
+				}
+				if (device->supports_ARB_instanced_arrays)
+				{
+					device->attributeDivisor[attribLoc] = bindings[i].instanceFrequency;
+				}
+			}
+		}
+		OPENGL_INTERNAL_FlushGLVertexAttributes(device);
+
+		device->ldBaseVertex = baseVertex;
+		device->ldEffect = device->currentEffect;
+		device->ldTechnique = device->currentTechnique;
+		device->ldPass = device->currentPass;
+		device->effectApplied = 0;
+		device->ldVertexDeclaration = NULL;
+		device->ldPointer = NULL;
+	}
+
+	MOJOSHADER_glProgramReady();
+	MOJOSHADER_glProgramViewportInfo(
+		device->viewport.w, device->viewport.h,
+		device->backbuffer->width, device->backbuffer->height,
+		device->renderTargetBound
+	);
 }
 
 void OPENGL_ApplyVertexDeclaration(
@@ -1987,25 +2130,387 @@ void OPENGL_ApplyVertexDeclaration(
 	void* ptr,
 	int32_t vertexOffset
 ) {
-	/* TODO */
+	int32_t usage, index, attribLoc, i, j;
+	FNA3D_VertexElement *element;
+	OpenGLVertexAttribute *attr;
+	uint8_t normalized;
+	uint8_t *finalPtr;
+	uint8_t *basePtr = (uint8_t*) ptr;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+
+	BindVertexBuffer(device, 0);
+	basePtr += (vertexDeclaration->vertexStride * vertexOffset);
+
+	if (	vertexDeclaration != device->ldVertexDeclaration ||
+		basePtr != device->ldPointer ||
+		device->currentEffect != device->ldEffect ||
+		device->currentTechnique != device->ldTechnique ||
+		device->currentPass != device->ldPass ||
+		device->effectApplied	)
+	{
+		/* There's this weird case where you can have overlapping
+		 * vertex usage/index combinations. It seems like the first
+		 * attrib gets priority, so whenever a duplicate attribute
+		 * exists, give it the next available index. If that fails, we
+		 * have to crash :/
+		 * -flibit
+		 */
+		SDL_memset(device->attrUse, '\0', sizeof(device->attrUse));
+		for (i = 0; i < vertexDeclaration->elementCount; i += 1)
+		{
+			element = &vertexDeclaration->elements[i];
+			usage = element->vertexElementUsage;
+			index = element->usageIndex;
+			if (device->attrUse[usage][index])
+			{
+				index = -1;
+				for (j = 0; j < 16; j += 1)
+				{
+					if (!device->attrUse[usage][j])
+					{
+						index = j;
+						break;
+					}
+				}
+				if (index < 0)
+				{
+					SDL_LogError(
+						SDL_LOG_CATEGORY_APPLICATION,
+						"Vertex usage collision!"
+					);
+				}
+			}
+			device->attrUse[usage][index] = 1;
+			attribLoc = MOJOSHADER_glGetVertexAttribLocation(
+				XNAToGL_VertexAttribUsage[usage],
+				index
+			);
+			if (attribLoc == -1)
+			{
+				/* Stream not used! */
+				continue;
+			}
+			device->attributeEnabled[attribLoc] = 1;
+			attr = &device->attributes[attribLoc];
+			finalPtr = basePtr + element->offset;
+			normalized = XNAToGL_VertexAttribNormalized(element);
+			if (	attr->currentBuffer != 0 ||
+				attr->currentPointer != finalPtr ||
+				attr->currentFormat != element->vertexElementFormat ||
+				attr->currentNormalized != normalized ||
+				attr->currentStride != vertexDeclaration->vertexStride	)
+			{
+				device->glVertexAttribPointer(
+					attribLoc,
+					XNAToGL_VertexAttribSize[element->vertexElementFormat],
+					XNAToGL_VertexAttribType[element->vertexElementFormat],
+					normalized,
+					vertexDeclaration->vertexStride,
+					finalPtr
+				);
+				attr->currentBuffer = 0;
+				attr->currentPointer = finalPtr;
+				attr->currentFormat = element->vertexElementFormat;
+				attr->currentNormalized = normalized;
+				attr->currentStride = vertexDeclaration->vertexStride;
+			}
+			device->attributeDivisor[attribLoc] = 0;
+		}
+		OPENGL_INTERNAL_FlushGLVertexAttributes(device);
+
+		device->ldVertexDeclaration = vertexDeclaration;
+		device->ldPointer = ptr;
+		device->ldEffect = device->currentEffect;
+		device->ldTechnique = device->currentTechnique;
+		device->ldPass = device->currentPass;
+		device->effectApplied = 0;
+		device->ldBaseVertex = -1;
+	}
+
+	MOJOSHADER_glProgramReady();
+	MOJOSHADER_glProgramViewportInfo(
+		device->viewport.w, device->viewport.h,
+		device->backbuffer->width, device->backbuffer->height,
+		device->renderTargetBound
+	);
 }
 
 /* Render Targets */
 
 void OPENGL_SetRenderTargets(
 	void* driverData,
-	/* FIXME: Oh shit RenderTargetBinding[] renderTargets, */
+	FNA3D_RenderTargetBinding *renderTargets,
+	int32_t numRenderTargets,
 	FNA3D_Renderbuffer *renderbuffer,
 	FNA3D_DepthFormat depthFormat
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLRenderbuffer *rb = (OpenGLRenderbuffer*) renderbuffer;
+	FNA3D_RenderTargetBinding rt;
+	int32_t i;
+	GLuint handle;
+
+	/* Bind the right framebuffer, if needed */
+	if (renderTargets == NULL)
+	{
+		BindFramebuffer(
+			device,
+			device->backbuffer->type == BACKBUFFER_TYPE_OPENGL ?
+				device->backbuffer->opengl.handle :
+				device->realBackbufferFBO
+		);
+		device->renderTargetBound = 0;
+		return;
+	}
+	else
+	{
+		BindFramebuffer(device, device->targetFramebuffer);
+		device->renderTargetBound = 1;
+	}
+
+	for (i = 0; i < numRenderTargets; i += 1)
+	{
+		rt = renderTargets[i];
+		if (rt.colorBuffer != NULL)
+		{
+			device->attachments[i] = ((OpenGLRenderbuffer*) rt.colorBuffer)->handle;
+			device->attachmentTypes[i] = GL_RENDERBUFFER;
+		}
+		else
+		{
+			device->attachments[i] = ((OpenGLTexture*) rt.texture)->handle;
+			if (rt.type == RENDERTARGET_TYPE_2D)
+			{
+				device->attachmentTypes[i] = GL_TEXTURE_2D;
+			}
+			else
+			{
+				device->attachmentTypes[i] = GL_TEXTURE_CUBE_MAP_POSITIVE_X + rt.cubeMapFace;
+			}
+		}
+	}
+
+	/* Update the color attachments, DrawBuffers state */
+	for (i = 0; i < numRenderTargets; i += 1)
+	{
+		if (device->attachments[i] != device->currentAttachments[i])
+		{
+			if (device->currentAttachments[i] != 0)
+			{
+				if (	device->attachmentTypes[i] != GL_RENDERBUFFER &&
+					device->currentAttachmentTypes[i] == GL_RENDERBUFFER	)
+				{
+					device->glFramebufferRenderbuffer(
+						GL_FRAMEBUFFER,
+						GL_COLOR_ATTACHMENT0 + i,
+						GL_RENDERBUFFER,
+						0
+					);
+				}
+				else if (	device->attachmentTypes[i] == GL_RENDERBUFFER &&
+						device->currentAttachmentTypes[i] != GL_RENDERBUFFER	)
+				{
+					device->glFramebufferTexture2D(
+						GL_FRAMEBUFFER,
+						GL_COLOR_ATTACHMENT0 + i,
+						device->currentAttachmentTypes[i],
+						0,
+						0
+					);
+				}
+			}
+			if (device->attachmentTypes[i] == GL_RENDERBUFFER)
+			{
+				device->glFramebufferRenderbuffer(
+					GL_FRAMEBUFFER,
+					GL_COLOR_ATTACHMENT0 + i,
+					GL_RENDERBUFFER,
+					device->attachments[i]
+				);
+			}
+			else
+			{
+				device->glFramebufferTexture2D(
+					GL_FRAMEBUFFER,
+					GL_COLOR_ATTACHMENT0 + i,
+					device->attachmentTypes[i],
+					device->attachments[i],
+					0
+				);
+			}
+			device->currentAttachments[i] = device->attachments[i];
+			device->currentAttachmentTypes[i] = device->attachmentTypes[i];
+		}
+		else if (device->attachmentTypes[i] != device->currentAttachmentTypes[i])
+		{
+			/* Texture cube face change! */
+			device->glFramebufferTexture2D(
+				GL_FRAMEBUFFER,
+				GL_COLOR_ATTACHMENT0 + i,
+				device->attachmentTypes[i],
+				device->attachments[i],
+				0
+			);
+			device->currentAttachmentTypes[i] = device->attachmentTypes[i];
+		}
+	}
+	while (i < device->numAttachments)
+	{
+		if (device->currentAttachments[i] != 0)
+		{
+			if (device->currentAttachmentTypes[i] == GL_RENDERBUFFER)
+			{
+				device->glFramebufferRenderbuffer(
+					GL_FRAMEBUFFER,
+					GL_COLOR_ATTACHMENT0 + i,
+					GL_RENDERBUFFER,
+					0
+				);
+			}
+			else
+			{
+				device->glFramebufferTexture2D(
+					GL_FRAMEBUFFER,
+					GL_COLOR_ATTACHMENT0 + i,
+					device->currentAttachmentTypes[i],
+					0,
+					0
+				);
+			}
+			device->currentAttachments[i] = 0;
+			device->currentAttachmentTypes[i] = GL_TEXTURE_2D;
+		}
+		i += 1;
+	}
+	if (numRenderTargets != device->currentDrawBuffers)
+	{
+		device->glDrawBuffers(numRenderTargets, device->drawBuffersArray);
+		device->currentDrawBuffers = numRenderTargets;
+	}
+
+	/* Update the depth/stencil attachment */
+	/* FIXME: Notice that we do separate attach calls for the stencil.
+	 * We _should_ be able to do a single attach for depthstencil, but
+	 * some drivers (like Mesa) cannot into GL_DEPTH_STENCIL_ATTACHMENT.
+	 * Use XNAToGL.DepthStencilAttachment when this isn't a problem.
+	 * -flibit
+	 */
+	if (renderbuffer == NULL)
+	{
+		handle = 0;
+	}
+	else
+	{
+		handle = rb->handle;
+	}
+	if (handle != device->currentRenderbuffer)
+	{
+		if (device->currentDepthStencilFormat == FNA3D_DEPTHFORMAT_D24S8)
+		{
+			device->glFramebufferRenderbuffer(
+				GL_FRAMEBUFFER,
+				GL_STENCIL_ATTACHMENT,
+				GL_RENDERBUFFER,
+				0
+			);
+		}
+		device->currentDepthStencilFormat = depthFormat;
+		device->glFramebufferRenderbuffer(
+			GL_FRAMEBUFFER,
+			GL_DEPTH_ATTACHMENT,
+			GL_RENDERBUFFER,
+			handle
+		);
+		if (device->currentDepthStencilFormat == FNA3D_DEPTHFORMAT_D24S8)
+		{
+			device->glFramebufferRenderbuffer(
+				GL_FRAMEBUFFER,
+				GL_STENCIL_ATTACHMENT,
+				GL_RENDERBUFFER,
+				handle
+			);
+		}
+		device->currentRenderbuffer = handle;
+	}
 }
 
 void OPENGL_ResolveTarget(
-	void* driverData
-	/* FIXME: Oh shit RenderTargetBinding target */
+	void* driverData,
+	FNA3D_RenderTargetBinding *target
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	int32_t width, height;
+	GLuint prevBuffer;
+	OpenGLTexture *prevTex;
+	OpenGLTexture *rtTex = (OpenGLTexture*) target->texture;
+	GLenum textureTarget = (
+		target->type == RENDERTARGET_TYPE_2D ?
+			GL_TEXTURE_2D :
+			GL_TEXTURE_CUBE_MAP_POSITIVE_X + target->cubeMapFace
+	);
+
+	if (target->multiSampleCount > 0)
+	{
+		prevBuffer = device->currentDrawFramebuffer;
+
+		/* Set up the texture framebuffer */
+		width = target->width;
+		height = target->height;
+		BindFramebuffer(device, device->resolveFramebufferRead);
+		device->glFramebufferTexture2D(
+			GL_FRAMEBUFFER,
+			GL_COLOR_ATTACHMENT0,
+			textureTarget,
+			rtTex->handle,
+			0
+		);
+
+		/* Set up the renderbuffer framebuffer */
+		BindFramebuffer(device, device->resolveFramebufferRead);
+		device->glFramebufferRenderbuffer(
+			GL_FRAMEBUFFER,
+			GL_COLOR_ATTACHMENT0,
+			GL_RENDERBUFFER,
+			((OpenGLRenderbuffer*) target->colorBuffer)->handle
+		);
+
+		/* Blit! */
+		if (device->scissorTestEnable)
+		{
+			device->glDisable(GL_SCISSOR_TEST);
+		}
+		BindDrawFramebuffer(device, device->resolveFramebufferDraw);
+		device->glBlitFramebuffer(
+			0, 0, width, height,
+			0, 0, width, height,
+			GL_COLOR_BUFFER_BIT,
+			GL_LINEAR
+		);
+		/* Invalidate the MSAA buffer */
+		if (device->supports_ARB_invalidate_subdata)
+		{
+			device->glInvalidateFramebuffer(
+				GL_READ_FRAMEBUFFER,
+				device->numAttachments + 2,
+				device->drawBuffersArray
+			);
+		}
+		if (device->scissorTestEnable)
+		{
+			device->glEnable(GL_SCISSOR_TEST);
+		}
+
+		BindFramebuffer(device, prevBuffer);
+	}
+
+	/* If the target has mipmaps, regenerate them now */
+	if (target->levelCount > 1)
+	{
+		prevTex = device->textures[0];
+		BindTexture(device, rtTex);
+		device->glGenerateMipmap(textureTarget);
+		BindTexture(device, prevTex);
+	}
 }
 
 /* Backbuffer Functions */
@@ -2014,8 +2519,8 @@ static void OPENGL_INTERNAL_CreateBackbuffer(
 	OpenGLDevice *device,
 	FNA3D_PresentationParameters *parameters
 ) {
-	int useFauxBackbuffer;
-	int drawX, drawY;
+	int32_t useFauxBackbuffer;
+	int32_t drawX, drawY;
 	SDL_GL_GetDrawableSize(
 		(SDL_Window*) parameters->deviceWindowHandle,
 		&drawX,
@@ -2371,26 +2876,27 @@ static void OPENGL_INTERNAL_DisposeBackbuffer(OpenGLDevice *device)
 static uint8_t OPENGL_INTERNAL_ReadTargetIfApplicable(
 	void* driverData,
 	FNA3D_Texture* textureIn,
-	int width,
-	int height,
-	int level,
+	int32_t width,
+	int32_t height,
+	int32_t level,
 	void* data,
-	int subX,
-	int subY,
-	int subW,
-	int subH
+	int32_t subX,
+	int32_t subY,
+	int32_t subW,
+	int32_t subH
 ) {
-	OpenGLDevice   *device = (OpenGLDevice*) driverData;
+	GLuint prevReadBuffer, prevWriteBuffer;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
 	OpenGLTexture *texture = (OpenGLTexture*) textureIn;
 	uint8_t texUnbound = (	device->currentDrawBuffers != 1 ||
-				device->currentAttachments[0] != texture->handle);
+				device->currentAttachments[0] != texture->handle	);
 	if (texUnbound && !device->useES3)
 	{
 		return 0;
 	}
 
-	uint8_t prevReadBuffer = device->currentReadFramebuffer;
-	uint8_t prevWriteBuffer = device->currentDrawFramebuffer;
+	prevReadBuffer = device->currentReadFramebuffer;
+	prevWriteBuffer = device->currentDrawFramebuffer;
 	if (texUnbound)
 	{
 		BindFramebuffer(device, device->resolveFramebufferRead);
@@ -2601,18 +3107,16 @@ int32_t OPENGL_GetBackbufferMultiSampleCount(void* driverData)
 
 /* Textures */
 
-OpenGLTexture* OPENGL_INTERNAL_CreateTexture(
+static OpenGLTexture* OPENGL_INTERNAL_CreateTexture(
 	OpenGLDevice *device,
 	GLenum target,
-	int levelCount
+	int32_t levelCount
 ) {
-	GLuint handle;
-	device->glGenTextures(1, &handle);
 	OpenGLTexture* result = (OpenGLTexture*) SDL_malloc(
 		sizeof(OpenGLTexture)
 	);
 
-	result->handle = handle;
+	device->glGenTextures(1, &result->handle);
 	result->target = target;
 	result->hasMipmaps = (levelCount > 1);
 	result->wrapS = FNA3D_TEXTUREADDRESSMODE_WRAP;
@@ -2654,7 +3158,9 @@ OpenGLTexture* OPENGL_INTERNAL_CreateTexture(
 	device->glTexParameterf(
 		result->target,
 		GL_TEXTURE_MAX_ANISOTROPY_EXT,
-		(result->filter == FNA3D_TEXTUREFILTER_ANISOTROPIC) ? SDL_max(result->anisotropy, 1.0f) : 1.0f
+		(result->filter == FNA3D_TEXTUREFILTER_ANISOTROPIC) ?
+			SDL_max(result->anisotropy, 1.0f) :
+			1.0f
 	);
 	device->glTexParameteri(
 		result->target,
@@ -2672,7 +3178,7 @@ OpenGLTexture* OPENGL_INTERNAL_CreateTexture(
 	return result;
 }
 
-int OPENGL_INTERNAL_Texture_GetFormatSize(FNA3D_SurfaceFormat format)
+static int32_t OPENGL_INTERNAL_Texture_GetFormatSize(FNA3D_SurfaceFormat format)
 {
 	switch (format)
 	{
@@ -2704,15 +3210,20 @@ int OPENGL_INTERNAL_Texture_GetFormatSize(FNA3D_SurfaceFormat format)
 		case FNA3D_SURFACEFORMAT_VECTOR4:
 			return 16;
 		default:
-			abort();
+			SDL_LogError(
+				SDL_LOG_CATEGORY_APPLICATION,
+				"Unrecognized SurfaceFormat!"
+			);
+			return 0;
 	}
 }
 
-static int OPENGL_INTERNAL_Texture_GetPixelStoreAlignment(FNA3D_SurfaceFormat format) {
-	/*
-	 * https://github.com/FNA-XNA/FNA/pull/238
+static int32_t OPENGL_INTERNAL_Texture_GetPixelStoreAlignment(FNA3D_SurfaceFormat format)
+{
+	/* https://github.com/FNA-XNA/FNA/pull/238
 	 * https://www.khronos.org/registry/OpenGL/specs/gl/glspec21.pdf
-	 * OpenGL 2.1 Specification, section 3.6.1, table 3.1 specifies that the pixelstorei alignment cannot exceed 8
+	 * OpenGL 2.1 Specification, section 3.6.1, table 3.1 specifies that
+	 * the pixelstorei alignment cannot exceed 8
 	 */
 	return SDL_min(8, OPENGL_INTERNAL_Texture_GetFormatSize(format));
 }
@@ -2725,27 +3236,29 @@ FNA3D_Texture* OPENGL_CreateTexture2D(
 	int32_t levelCount,
 	uint8_t isRenderTarget
 ) {
-	OpenGLDevice  *device = (OpenGLDevice*) driverData;
-	OpenGLTexture *result = NULL;
+	OpenGLTexture *result;
+	GLenum glFormat, glInternalFormat, glType;
+	int32_t levelWidth, levelHeight, i;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
 
-	result = (OpenGLTexture *) OPENGL_INTERNAL_CreateTexture(
+	result = (OpenGLTexture*) OPENGL_INTERNAL_CreateTexture(
 		device,
 		GL_TEXTURE_2D,
 		levelCount
 	);
 
-	GLenum glFormat = XNAToGL_TextureFormat[format];
-	GLenum glInternalFormat = XNAToGL_TextureInternalFormat[format];
+	glFormat = XNAToGL_TextureFormat[format];
+	glInternalFormat = XNAToGL_TextureInternalFormat[format];
 	if (glFormat == GL_COMPRESSED_TEXTURE_FORMATS)
 	{
-		for (int i = 0; i < levelCount; i += 1)
+		for (i = 0; i < levelCount; i += 1)
 		{
-			int levelWidth	= SDL_max(width >> i, 1);
-			int levelHeight	= SDL_max(height >> i, 1);
+			levelWidth = SDL_max(width >> i, 1);
+			levelHeight = SDL_max(height >> i, 1);
 			device->glCompressedTexImage2D(
 				GL_TEXTURE_2D,
 				i,
-				(int) glInternalFormat,
+				glInternalFormat,
 				levelWidth,
 				levelHeight,
 				0,
@@ -2756,13 +3269,13 @@ FNA3D_Texture* OPENGL_CreateTexture2D(
 	}
 	else
 	{
-		GLenum glType = XNAToGL_TextureDataType[format];
-		for (int i = 0; i < levelCount; i += 1)
+		glType = XNAToGL_TextureDataType[format];
+		for (i = 0; i < levelCount; i += 1)
 		{
 			device->glTexImage2D(
 				GL_TEXTURE_2D,
 				i,
-				(int) glInternalFormat,
+				glInternalFormat,
 				SDL_max(width >> i, 1),
 				SDL_max(height >> i, 1),
 				0,
@@ -2773,7 +3286,7 @@ FNA3D_Texture* OPENGL_CreateTexture2D(
 		}
 	}
 
-	return (FNA3D_Texture *)result;
+	return (FNA3D_Texture*) result;
 }
 
 FNA3D_Texture* OPENGL_CreateTexture3D(
@@ -2784,20 +3297,23 @@ FNA3D_Texture* OPENGL_CreateTexture3D(
 	int32_t depth,
 	int32_t levelCount
 ) {
+	OpenGLTexture *result;
+	GLenum glFormat, glInternalFormat, glType;
+	int32_t i;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
+
 	SDL_assert(device->supports_3DTexture);
 
-	OpenGLTexture* result = NULL;
 	result = OPENGL_INTERNAL_CreateTexture(
 		device,
 		GL_TEXTURE_3D,
 		levelCount
 	);
 
-	GLenum glFormat = XNAToGL_TextureFormat[format];
-	GLenum glInternalFormat = XNAToGL_TextureInternalFormat[format];
-	GLenum glType = XNAToGL_TextureDataType[format];
-	for (int i = 0; i < levelCount; i += 1)
+	glFormat = XNAToGL_TextureFormat[format];
+	glInternalFormat = XNAToGL_TextureInternalFormat[format];
+	glType = XNAToGL_TextureDataType[format];
+	for (i = 0; i < levelCount; i += 1)
 	{
 		device->glTexImage3D(
 			GL_TEXTURE_3D,
@@ -2812,7 +3328,7 @@ FNA3D_Texture* OPENGL_CreateTexture3D(
 			NULL
 		);
 	}
-	return (FNA3D_Texture *)result;
+	return (FNA3D_Texture*) result;
 }
 
 FNA3D_Texture* OPENGL_CreateTextureCube(
@@ -2822,28 +3338,30 @@ FNA3D_Texture* OPENGL_CreateTextureCube(
 	int32_t levelCount,
 	uint8_t isRenderTarget
 ) {
+	OpenGLTexture *result;
+	GLenum glFormat, glInternalFormat;
+	int32_t levelSize, i, l;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
 
-	OpenGLTexture* result = NULL;
 	result = OPENGL_INTERNAL_CreateTexture(
 		device,
 		GL_TEXTURE_CUBE_MAP,
 		levelCount
 	);
 
-	GLenum glFormat = XNAToGL_TextureFormat[format];
-	GLenum glInternalFormat = XNAToGL_TextureInternalFormat[format];
+	glFormat = XNAToGL_TextureFormat[format];
+	glInternalFormat = XNAToGL_TextureInternalFormat[format];
 	if (glFormat == GL_COMPRESSED_TEXTURE_FORMATS)
 	{
-		for (int i = 0; i < 6; i += 1)
+		for (i = 0; i < 6; i += 1)
 		{
-			for (int l = 0; l < levelCount; l += 1)
+			for (l = 0; l < levelCount; l += 1)
 			{
-				int levelSize = SDL_max(size >> l, 1);
+				levelSize = SDL_max(size >> l, 1);
 				device->glCompressedTexImage2D(
 					GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
 					l,
-					(int) glInternalFormat,
+					glInternalFormat,
 					levelSize,
 					levelSize,
 					0,
@@ -2856,11 +3374,11 @@ FNA3D_Texture* OPENGL_CreateTextureCube(
 	else
 	{
 		GLenum glType = XNAToGL_TextureDataType[format];
-		for (int i = 0; i < 6; i += 1)
+		for (i = 0; i < 6; i += 1)
 		{
-			for (int l = 0; l < levelCount; l += 1)
+			for (l = 0; l < levelCount; l += 1)
 			{
-				int levelSize = SDL_max(size >> l, 1);
+				levelSize = SDL_max(size >> l, 1);
 				device->glTexImage2D(
 					GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
 					l,
@@ -2876,14 +3394,29 @@ FNA3D_Texture* OPENGL_CreateTextureCube(
 		}
 	}
 
-	return (FNA3D_Texture *)result;
+	return (FNA3D_Texture*) result;
 }
 
 void OPENGL_AddDisposeTexture(
 	void* driverData,
 	FNA3D_Texture *texture
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLTexture *glTexture = (OpenGLTexture*) texture;
+	GLuint handle = glTexture->handle;
+
+	int32_t i;
+	for (i = 0; i < device->numAttachments; i += 1)
+	{
+		if (handle == device->currentAttachments[i])
+		{
+			/* Force an attachment update, this no longer exists! */
+			device->currentAttachments[i] = UINT32_MAX;
+		}
+	}
+	device->glDeleteTextures(1, &handle);
+
+	SDL_free(glTexture);
 }
 
 void OPENGL_SetTextureData2D(
@@ -2898,10 +3431,13 @@ void OPENGL_SetTextureData2D(
 	void* data,
 	int32_t dataLength
 ) {
+	GLenum glFormat;
+	int32_t packSize;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
-	BindTexture(device, (OpenGLTexture *)texture);
 
-	GLenum glFormat = XNAToGL_TextureFormat[format];
+	BindTexture(device, (OpenGLTexture*) texture);
+
+	glFormat = XNAToGL_TextureFormat[format];
 	if (glFormat == GL_COMPRESSED_TEXTURE_FORMATS)
 	{
 		/* Note that we're using glInternalFormat, not glFormat.
@@ -2925,7 +3461,7 @@ void OPENGL_SetTextureData2D(
 	else
 	{
 		/* Set pixel alignment to match texel size in bytes. */
-		int packSize = OPENGL_INTERNAL_Texture_GetPixelStoreAlignment(format);
+		packSize = OPENGL_INTERNAL_Texture_GetPixelStoreAlignment(format);
 		if (packSize != 4)
 		{
 			device->glPixelStorei(
@@ -2972,8 +3508,10 @@ void OPENGL_SetTextureData3D(
 	int32_t dataLength
 ) {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
+
 	SDL_assert(device->supports_3DTexture);
-	BindTexture(device, (OpenGLTexture *)texture);
+
+	BindTexture(device, (OpenGLTexture*) texture);
 
 	device->glTexSubImage3D(
 		GL_TEXTURE_3D,
@@ -3003,20 +3541,22 @@ void OPENGL_SetTextureDataCube(
 	void* data,
 	int32_t dataLength
 ) {
+	GLenum glFormat;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
-	BindTexture(device, (OpenGLTexture *)texture);
 
-	GLenum glFormat = XNAToGL_TextureFormat[format];
+	BindTexture(device, (OpenGLTexture*) texture);
+
+	glFormat = XNAToGL_TextureFormat[format];
 	if (glFormat == GL_COMPRESSED_TEXTURE_FORMATS)
 	{
 		/* Note that we're using glInternalFormat, not glFormat.
-			* In this case, they should actually be the same thing,
-			* but we use glFormat somewhat differently for
-			* compressed textures.
-			* -flibit
-			*/
+		 * In this case, they should actually be the same thing,
+		 * but we use glFormat somewhat differently for
+		 * compressed textures.
+		 * -flibit
+		 */
 		device->glCompressedTexSubImage2D(
-			GL_TEXTURE_CUBE_MAP_POSITIVE_X + (int) cubeMapFace,
+			GL_TEXTURE_CUBE_MAP_POSITIVE_X + cubeMapFace,
 			level,
 			x,
 			y,
@@ -3030,7 +3570,7 @@ void OPENGL_SetTextureDataCube(
 	else
 	{
 		device->glTexSubImage2D(
-			GL_TEXTURE_CUBE_MAP_POSITIVE_X + (int) cubeMapFace,
+			GL_TEXTURE_CUBE_MAP_POSITIVE_X + cubeMapFace,
 			level,
 			x,
 			y,
@@ -3041,27 +3581,6 @@ void OPENGL_SetTextureDataCube(
 			data
 		);
 	}
-}
-
-static void OPENGL_INTERNAL_SetTextureData_YUV_Channel(
-	OpenGLDevice *device,
-	FNA3D_Texture *target,
-	int32_t width,
-	int32_t height,
-	void* ptr
-) {
-	BindTexture(device, (OpenGLTexture *)target);
-	device->glTexSubImage2D(
-		GL_TEXTURE_2D,
-		0,
-		0,
-		0,
-		width,
-		height,
-		GL_ALPHA,
-		GL_UNSIGNED_BYTE,
-		ptr
-	);
 }
 
 void OPENGL_SetTextureDataYUV(
@@ -3077,11 +3596,44 @@ void OPENGL_SetTextureDataYUV(
 	uint8_t *dataPtr = (uint8_t*) ptr;
 
 	device->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-	OPENGL_INTERNAL_SetTextureData_YUV_Channel(device, y, w, h, dataPtr);
+	BindTexture(device, (OpenGLTexture*) y);
+	device->glTexSubImage2D(
+		GL_TEXTURE_2D,
+		0,
+		0,
+		0,
+		w,
+		h,
+		GL_ALPHA,
+		GL_UNSIGNED_BYTE,
+		dataPtr
+	);
 	dataPtr += (w * h);
-	OPENGL_INTERNAL_SetTextureData_YUV_Channel(device, u, w, h, dataPtr);
-	dataPtr += (w * h);
-	OPENGL_INTERNAL_SetTextureData_YUV_Channel(device, v, w, h, dataPtr);
+	BindTexture(device, (OpenGLTexture*) u);
+	device->glTexSubImage2D(
+		GL_TEXTURE_2D,
+		0,
+		0,
+		0,
+		w / 2,
+		h / 2,
+		GL_ALPHA,
+		GL_UNSIGNED_BYTE,
+		dataPtr
+	);
+	dataPtr += (w/2 * h/2);
+	BindTexture(device, (OpenGLTexture*) v);
+	device->glTexSubImage2D(
+		GL_TEXTURE_2D,
+		0,
+		0,
+		0,
+		w / 2,
+		h / 2,
+		GL_ALPHA,
+		GL_UNSIGNED_BYTE,
+		dataPtr
+	);
 	device->glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
 }
 
@@ -3101,8 +3653,12 @@ void OPENGL_GetTextureData2D(
 	int32_t elementCount,
 	int32_t elementSizeInBytes
 ) {
+	GLenum glFormat;
+	uint8_t *texData;
+	int32_t curPixel, row, col;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
 	uint8_t *dataPtr = (uint8_t*) data;
+
 	SDL_assert(device->supports_NonES3);
 
 	if (level == 0 && OPENGL_INTERNAL_ReadTargetIfApplicable(
@@ -3121,10 +3677,14 @@ void OPENGL_GetTextureData2D(
 	}
 
 	BindTexture(device, (OpenGLTexture *)texture);
-	GLenum glFormat = XNAToGL_TextureFormat[format];
+	glFormat = XNAToGL_TextureFormat[format];
 	if (glFormat == GL_COMPRESSED_TEXTURE_FORMATS)
 	{
-		abort();
+		SDL_LogError(
+			SDL_LOG_CATEGORY_APPLICATION,
+			"GetData with compressed textures unsupported!"
+		);
+		return;
 	}
 	else if (x == 0 && y == 0 && w == textureWidth && h == textureHeight)
 	{
@@ -3140,8 +3700,11 @@ void OPENGL_GetTextureData2D(
 	else
 	{
 		/* Get the whole texture... */
-		void *texData = SDL_malloc(textureWidth * textureHeight * elementSizeInBytes);
-		uint8_t *texDataPtr = (uint8_t*) texData;
+		texData = (uint8_t*) SDL_malloc(
+			textureWidth *
+			textureHeight *
+			elementSizeInBytes
+		);
 
 		device->glGetTexImage(
 			GL_TEXTURE_2D,
@@ -3152,10 +3715,10 @@ void OPENGL_GetTextureData2D(
 		);
 
 		/* Now, blit the rect region into the user array. */
-		int curPixel = -1;
-		for (int row = y; row < y + h; row += 1)
+		curPixel = -1;
+		for (row = y; row < y + h; row += 1)
 		{
-			for (int col = x; col < x + w; col += 1)
+			for (col = x; col < x + w; col += 1)
 			{
 				curPixel += 1;
 				if (curPixel < startIndex)
@@ -3171,7 +3734,7 @@ void OPENGL_GetTextureData2D(
 				/* FIXME: Can we copy via pitch instead, or something? -flibit */
 				SDL_memcpy(
 					dataPtr + ((curPixel - startIndex) * elementSizeInBytes),
-					texDataPtr + (((row * w) + col) * elementSizeInBytes),
+					texData + (((row * w) + col) * elementSizeInBytes),
 					elementSizeInBytes
 				);
 			}
@@ -3199,8 +3762,11 @@ void OPENGL_GetTextureData3D(
 ) {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
 	SDL_assert(device->supports_NonES3);
-	
-	abort();
+
+	SDL_LogError(
+		SDL_LOG_CATEGORY_APPLICATION,
+		"GetTextureData3D is unsupported!"
+	);
 }
 
 void OPENGL_GetTextureDataCube(
@@ -3219,21 +3785,29 @@ void OPENGL_GetTextureDataCube(
 	int32_t elementCount,
 	int32_t elementSizeInBytes
 ) {
+	GLenum glFormat;
+	uint8_t *texData;
+	int32_t curPixel, row, col;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
 	uint8_t *dataPtr = (uint8_t*) data;
+
 	SDL_assert(device->supports_NonES3);
 
 	BindTexture(device, (OpenGLTexture *)texture);
-	GLenum glFormat = XNAToGL_TextureFormat[format];
+	glFormat = XNAToGL_TextureFormat[format];
 	if (glFormat == GL_COMPRESSED_TEXTURE_FORMATS)
 	{
-		abort();
+		SDL_LogError(
+			SDL_LOG_CATEGORY_APPLICATION,
+			"GetData with compressed textures unsupported!"
+		);
+		return;
 	}
 	else if (x == 0 && y == 0 && w == textureSize && h == textureSize)
 	{
 		/* Just throw the whole texture into the user array. */
 		device->glGetTexImage(
-			GL_TEXTURE_CUBE_MAP_POSITIVE_X + (int) cubeMapFace,
+			GL_TEXTURE_CUBE_MAP_POSITIVE_X + cubeMapFace,
 			level,
 			glFormat,
 			XNAToGL_TextureDataType[format],
@@ -3243,11 +3817,14 @@ void OPENGL_GetTextureDataCube(
 	else
 	{
 		/* Get the whole texture... */
-		void *texData = SDL_malloc(textureSize * textureSize * elementSizeInBytes);
-		uint8_t *texDataPtr = (uint8_t*) texData;
+		texData = (uint8_t*) SDL_malloc(
+			textureSize *
+			textureSize *
+			elementSizeInBytes
+		);
 
 		device->glGetTexImage(
-			GL_TEXTURE_CUBE_MAP_POSITIVE_X + (int) cubeMapFace,
+			GL_TEXTURE_CUBE_MAP_POSITIVE_X + cubeMapFace,
 			level,
 			glFormat,
 			XNAToGL_TextureDataType[format],
@@ -3255,10 +3832,10 @@ void OPENGL_GetTextureDataCube(
 		);
 
 		/* Now, blit the rect region into the user array. */
-		int curPixel = -1;
-		for (int row = y; row < y + h; row += 1)
+		curPixel = -1;
+		for (row = y; row < y + h; row += 1)
 		{
-			for (int col = x; col < x + w; col += 1)
+			for (col = x; col < x + w; col += 1)
 			{
 				curPixel += 1;
 				if (curPixel < startIndex)
@@ -3274,7 +3851,7 @@ void OPENGL_GetTextureDataCube(
 				/* FIXME: Can we copy via pitch instead, or something? -flibit */
 				SDL_memcpy(
 					dataPtr + ((curPixel - startIndex) * elementSizeInBytes),
-					texDataPtr + (((row * textureSize) + col) * elementSizeInBytes),
+					texData + (((row * textureSize) + col) * elementSizeInBytes),
 					elementSizeInBytes
 				);
 			}
@@ -3401,15 +3978,53 @@ FNA3D_Buffer* OPENGL_GenVertexBuffer(
 	int32_t vertexCount,
 	int32_t vertexStride
 ) {
-	/* TODO */
-	return NULL;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *result = NULL;
+	GLuint handle;
+
+	device->glGenBuffers(1, &handle);
+
+	result = (OpenGLBuffer*) SDL_malloc(sizeof(OpenGLBuffer));
+	result->handle = handle;
+	result->size = (intptr_t) (vertexStride * vertexCount);
+	result->dynamic = (dynamic ? GL_STREAM_DRAW : GL_STATIC_DRAW);
+
+	BindVertexBuffer(device, handle);
+	device->glBufferData(
+		GL_ARRAY_BUFFER,
+		result->size,
+		NULL,
+		result->dynamic
+	);
+
+	return (FNA3D_Buffer*) result;
 }
 
 void OPENGL_AddDisposeVertexBuffer(
 	void* driverData,
 	FNA3D_Buffer *buffer
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *glBuffer = (OpenGLBuffer*) buffer;
+	GLuint handle = glBuffer->handle;
+	int32_t i;
+
+	if (handle == device->currentVertexBuffer)
+	{
+		device->glBindBuffer(GL_ARRAY_BUFFER, 0);
+		device->currentVertexBuffer = 0;
+	}
+	for (i = 0; i < device->numVertexAttributes; i += 1)
+	{
+		if (handle == device->attributes[i].currentBuffer)
+		{
+			/* Force the next vertex attrib update! */
+			device->attributes[i].currentBuffer = UINT32_MAX;
+		}
+	}
+	device->glDeleteBuffers(1, &handle);
+
+	SDL_free(glBuffer);
 }
 
 void OPENGL_SetVertexBufferData(
@@ -3420,7 +4035,27 @@ void OPENGL_SetVertexBufferData(
 	int32_t dataLength,
 	FNA3D_SetDataOptions options
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *glBuffer = (OpenGLBuffer*) buffer;
+
+	BindVertexBuffer(device, glBuffer->handle);
+
+	if (options == FNA3D_SETDATAOPTIONS_DISCARD)
+	{
+		device->glBufferData(
+			GL_ARRAY_BUFFER,
+			glBuffer->size,
+			NULL,
+			glBuffer->dynamic
+		);
+	}
+
+	device->glBufferSubData(
+		GL_ARRAY_BUFFER,
+		(GLintptr) offsetInBytes,
+		(GLsizeiptr) dataLength,
+		data
+	);
 }
 
 void OPENGL_GetVertexBufferData(
@@ -3433,9 +4068,46 @@ void OPENGL_GetVertexBufferData(
 	int32_t elementSizeInBytes,
 	int32_t vertexStride
 ) {
-	/* TODO */
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *glBuffer = (OpenGLBuffer*) buffer;
+	uint8_t *dataBytes, *cpy, *src, *dst;
+	uint8_t useStagingBuffer;
+	int32_t i;
+
 	SDL_assert(device->supports_NonES3);
+
+	dataBytes = (uint8_t*) data;
+	useStagingBuffer = elementSizeInBytes < vertexStride;
+	if (useStagingBuffer)
+	{
+		cpy = SDL_malloc(elementCount * vertexStride);
+	}
+	else
+	{
+		cpy = dataBytes + (startIndex * elementSizeInBytes);
+	}
+
+	BindVertexBuffer(device, glBuffer->handle);
+
+	device->glGetBufferSubData(
+		GL_ARRAY_BUFFER,
+		(GLintptr) offsetInBytes,
+		(GLsizeiptr) (elementCount * vertexStride),
+		cpy
+	);
+
+	if (useStagingBuffer)
+	{
+		src = cpy;
+		dst = dataBytes + (startIndex * elementSizeInBytes);
+		for (i = 0; i < elementCount; i += 1)
+		{
+			SDL_memcpy(dst, src, elementSizeInBytes);
+			dst += elementSizeInBytes;
+			src += vertexStride;
+		}
+		SDL_free(cpy);
+	}
 }
 
 /* Index Buffers */
@@ -3447,15 +4119,46 @@ FNA3D_Buffer* OPENGL_GenIndexBuffer(
 	int32_t indexCount,
 	FNA3D_IndexElementSize indexElementSize
 ) {
-	/* TODO */
-	return NULL;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *result = NULL;
+	GLuint handle;
+
+	device->glGenBuffers(1, &handle);
+
+	result = (OpenGLBuffer*) SDL_malloc(sizeof(OpenGLBuffer));
+	result->handle = handle;
+	result->size = (intptr_t) (
+		indexCount * XNAToGL_IndexSize[indexElementSize]
+	);
+	result->dynamic = (dynamic ? GL_STREAM_DRAW : GL_STATIC_DRAW);
+
+	BindIndexBuffer(device, handle);
+	device->glBufferData(
+		GL_ELEMENT_ARRAY_BUFFER,
+		result->size,
+		NULL,
+		result->dynamic
+	);
+
+	return (FNA3D_Buffer*) result;
 }
 
 void OPENGL_AddDisposeIndexBuffer(
 	void* driverData,
 	FNA3D_Buffer *buffer
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *glBuffer = (OpenGLBuffer*) buffer;
+	GLuint handle = glBuffer->handle;
+
+	if (handle == device->currentIndexBuffer)
+	{
+		device->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+		device->currentIndexBuffer = 0;
+	}
+	device->glDeleteBuffers(1, &handle);
+
+	SDL_free(glBuffer);
 }
 
 void OPENGL_SetIndexBufferData(
@@ -3466,7 +4169,27 @@ void OPENGL_SetIndexBufferData(
 	int32_t dataLength,
 	FNA3D_SetDataOptions options
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *glBuffer = (OpenGLBuffer*) buffer;
+
+	BindIndexBuffer(device, glBuffer->handle);
+
+	if (options == FNA3D_SETDATAOPTIONS_DISCARD)
+	{
+		device->glBufferData(
+			GL_ELEMENT_ARRAY_BUFFER,
+			glBuffer->size,
+			NULL,
+			glBuffer->dynamic
+		);
+	}
+
+	device->glBufferSubData(
+		GL_ELEMENT_ARRAY_BUFFER,
+		(GLintptr) offsetInBytes,
+		(GLsizeiptr) dataLength,
+		data
+	);
 }
 
 void OPENGL_GetIndexBufferData(
@@ -3478,34 +4201,121 @@ void OPENGL_GetIndexBufferData(
 	int32_t elementCount,
 	int32_t elementSizeInBytes
 ) {
-	/* TODO */
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLBuffer *glBuffer = (OpenGLBuffer*) buffer;
+
 	SDL_assert(device->supports_NonES3);
+
+	BindIndexBuffer(device, glBuffer->handle);
+
+	device->glGetBufferSubData(
+		GL_ELEMENT_ARRAY_BUFFER,
+		(GLintptr) offsetInBytes,
+		(GLsizeiptr) (elementCount * elementSizeInBytes),
+		((uint8_t*) data) + (startIndex * elementSizeInBytes)
+	);
 }
 
 /* Effects */
 
 FNA3D_Effect* OPENGL_CreateEffect(
 	void* driverData,
-	uint8_t *effectCode
+	uint8_t *effectCode,
+	uint32_t effectCodeLength
 ) {
-	/* TODO */
-	return NULL;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	MOJOSHADER_effect *effect;
+	MOJOSHADER_glEffect *glEffect;
+	OpenGLEffect *result;
+	int32_t i;
+
+	effect = MOJOSHADER_parseEffect(
+		device->shaderProfile,
+		effectCode,
+		effectCodeLength,
+		NULL,
+		0,
+		NULL,
+		0,
+		NULL,
+		NULL,
+		NULL
+	);
+
+	/* FIXME: Needs a debug check! */
+	for (i = 0; i < effect->error_count; i += 1)
+	{
+		SDL_LogError(
+			SDL_LOG_CATEGORY_APPLICATION,
+			"MOJOSHADER_parseEffect Error: %s",
+			effect->errors[i].error
+		);
+	}
+
+	glEffect = MOJOSHADER_glCompileEffect(effect);
+	if (glEffect == NULL)
+	{
+		SDL_LogError(
+			SDL_LOG_CATEGORY_APPLICATION,
+			MOJOSHADER_glGetError()
+		);
+		SDL_assert(0);
+	}
+
+	result = (OpenGLEffect*) SDL_malloc(sizeof(OpenGLEffect));
+	result->effect = effect;
+	result->glEffect = glEffect;
+
+	return (FNA3D_Effect*) result;
 }
 
 FNA3D_Effect* OPENGL_CloneEffect(
 	void* driverData,
 	FNA3D_Effect *effect
 ) {
-	/* TODO */
-	return NULL;
+	OpenGLEffect *cloneSource = (OpenGLEffect*) effect;
+	MOJOSHADER_effect *effectData;
+	MOJOSHADER_glEffect *glEffect;
+	OpenGLEffect *result;
+
+	effectData = MOJOSHADER_cloneEffect(cloneSource->effect);
+	glEffect = MOJOSHADER_glCompileEffect(effectData);
+	if (glEffect == NULL)
+	{
+		SDL_LogError(
+			SDL_LOG_CATEGORY_APPLICATION,
+			MOJOSHADER_glGetError()
+		);
+		SDL_assert(0);
+	}
+
+	result = (OpenGLEffect*) SDL_malloc(sizeof(OpenGLEffect));
+	result->effect = effectData;
+	result->glEffect = glEffect;
+
+	return (FNA3D_Effect*) result;
 }
 
 void OPENGL_AddDisposeEffect(
 	void* driverData,
 	FNA3D_Effect *effect
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLEffect *fnaEffect = (OpenGLEffect*) effect;
+	MOJOSHADER_glEffect *glEffect = fnaEffect->glEffect;
+
+	if (glEffect == device->currentEffect)
+	{
+		MOJOSHADER_glEffectEndPass(device->currentEffect);
+		MOJOSHADER_glEffectEnd(device->currentEffect);
+		device->currentEffect = NULL;
+		device->currentTechnique = NULL;
+		device->currentPass = 0;
+	}
+	MOJOSHADER_glDeleteEffect(glEffect);
+	MOJOSHADER_freeEffect(fnaEffect->effect);
+
+	SDL_free(fnaEffect);
 }
 
 void OPENGL_ApplyEffect(
@@ -3515,7 +4325,43 @@ void OPENGL_ApplyEffect(
 	uint32_t pass,
 	MOJOSHADER_effectStateChanges *stateChanges
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLEffect *fnaEffect = (OpenGLEffect*) effect;
+	MOJOSHADER_glEffect *glEffectData = fnaEffect->glEffect;
+	uint32_t whatever;
+
+	device->effectApplied = 1;
+	if (glEffectData == device->currentEffect)
+	{
+		if (	technique == device->currentTechnique &&
+			pass == device->currentPass		)
+		{
+			MOJOSHADER_glEffectCommitChanges(
+				device->currentEffect
+			);
+			return;
+		}
+		MOJOSHADER_glEffectEndPass(device->currentEffect);
+		MOJOSHADER_glEffectBeginPass(device->currentEffect, pass);
+		device->currentTechnique = technique;
+		device->currentPass = pass;
+		return;
+	}
+	else if (device->currentEffect != NULL)
+	{
+		MOJOSHADER_glEffectEndPass(device->currentEffect);
+		MOJOSHADER_glEffectEnd(device->currentEffect);
+	}
+	MOJOSHADER_glEffectBegin(
+		glEffectData,
+		&whatever,
+		0,
+		stateChanges
+	);
+	MOJOSHADER_glEffectBeginPass(glEffectData, pass);
+	device->currentEffect = glEffectData;
+	device->currentTechnique = technique;
+	device->currentPass = pass;
 }
 
 void OPENGL_BeginPassRestore(
@@ -3523,61 +4369,81 @@ void OPENGL_BeginPassRestore(
 	FNA3D_Effect *effect,
 	MOJOSHADER_effectStateChanges *stateChanges
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	MOJOSHADER_glEffect *glEffectData = ((OpenGLEffect*) effect)->glEffect;
+	uint32_t whatever;
+
+	MOJOSHADER_glEffectBegin(
+		glEffectData,
+		&whatever,
+		1,
+		stateChanges
+	);
+	MOJOSHADER_glEffectBeginPass(glEffectData, 0);
+	device->effectApplied = 1;
 }
 
 void OPENGL_EndPassRestore(
 	void* driverData,
 	FNA3D_Effect *effect
 ) {
-	/* TODO */
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	MOJOSHADER_glEffect *glEffectData = ((OpenGLEffect*) effect)->glEffect;
+
+	MOJOSHADER_glEffectEndPass(glEffectData);
+	MOJOSHADER_glEffectEnd(glEffectData);
+	device->effectApplied = 1;
 }
 
 /* Queries */
 
 FNA3D_Query* OPENGL_CreateQuery(void* driverData)
 {
+	OpenGLQuery *result;
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
 	SDL_assert(device->supports_ARB_occlusion_query);
 
-	OpenGLQuery *result = SDL_malloc(sizeof(OpenGLQuery));
+	result = (OpenGLQuery*) SDL_malloc(sizeof(OpenGLQuery));
 	device->glGenQueries(1, &result->handle);
 
-	return (FNA3D_Query *)result;
+	return (FNA3D_Query*) result;
 }
 
 void OPENGL_AddDisposeQuery(void* driverData, FNA3D_Query *query)
 {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLQuery *glQuery = (OpenGLQuery*) query;
+
 	SDL_assert(device->supports_ARB_occlusion_query);
-	OpenGLQuery *_query = (OpenGLQuery *)query;
 
 	device->glDeleteQueries(
 		1,
-		&_query->handle
+		&glQuery->handle
 	);
 
-	SDL_free(_query);
+	SDL_free(glQuery);
 }
 
 void OPENGL_QueryBegin(void* driverData, FNA3D_Query *query)
 {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLQuery *glQuery = (OpenGLQuery*) query;
+
 	SDL_assert(device->supports_ARB_occlusion_query);
-	OpenGLQuery *_query = (OpenGLQuery *)query;
 
 	device->glBeginQuery(
 		GL_SAMPLES_PASSED,
-		_query->handle
+		glQuery->handle
 	);
 }
 
 void OPENGL_QueryEnd(void* driverData, FNA3D_Query *query)
 {
 	OpenGLDevice *device = (OpenGLDevice*) driverData;
+
 	SDL_assert(device->supports_ARB_occlusion_query);
 
-	// May need to check active queries...?
+	/* May need to check active queries...? */
 	device->glEndQuery(
 		GL_SAMPLES_PASSED
 	);
@@ -3585,13 +4451,14 @@ void OPENGL_QueryEnd(void* driverData, FNA3D_Query *query)
 
 uint8_t OPENGL_QueryComplete(void* driverData, FNA3D_Query *query)
 {
-	OpenGLDevice *device = (OpenGLDevice*) driverData;
-	SDL_assert(device->supports_ARB_occlusion_query);
-	OpenGLQuery *_query = (OpenGLQuery *)query;
-
 	GLuint result;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLQuery *glQuery = (OpenGLQuery*) query;
+
+	SDL_assert(device->supports_ARB_occlusion_query);
+
 	device->glGetQueryObjectuiv(
-		_query->handle,
+		glQuery->handle,
 		GL_QUERY_RESULT_AVAILABLE,
 		&result
 	);
@@ -3602,17 +4469,18 @@ int32_t OPENGL_QueryPixelCount(
 	void* driverData,
 	FNA3D_Query *query
 ) {
-	OpenGLDevice *device = (OpenGLDevice*) driverData;
-	SDL_assert(device->supports_ARB_occlusion_query);
-	OpenGLQuery *_query = (OpenGLQuery *)query;
-
 	GLuint result;
+	OpenGLDevice *device = (OpenGLDevice*) driverData;
+	OpenGLQuery *glQuery = (OpenGLQuery*) query;
+
+	SDL_assert(device->supports_ARB_occlusion_query);
+
 	device->glGetQueryObjectuiv(
-		_query->handle,
+		glQuery->handle,
 		GL_QUERY_RESULT,
 		&result
 	);
-	return (int) result;
+	return (int32_t) result;
 }
 
 /* Feature Queries */
@@ -3967,7 +4835,7 @@ static void checkExtensions(
 	uint8_t *supportsS3tc,
 	uint8_t *supportsDxt1
 ) {
-	int s3tc = (
+	uint8_t s3tc = (
 		SDL_strstr(ext, "GL_EXT_texture_compression_s3tc") ||
 		SDL_strstr(ext, "GL_OES_texture_compression_S3TC") ||
 		SDL_strstr(ext, "GL_EXT_texture_compression_dxt3") ||
@@ -3988,9 +4856,9 @@ static void checkExtensions(
 
 uint8_t OPENGL_PrepareWindowAttributes(uint8_t debugMode, uint32_t *flags)
 {
-	int forceES3, forceCore, forceCompat;
+	uint8_t forceES3, forceCore, forceCompat;
 	const char *osVersion;
-	int depthSize, stencilSize;
+	int32_t depthSize, stencilSize;
 	const char *depthFormatHint;
 
 	/* GLContext environment variables */
@@ -4105,14 +4973,14 @@ void OPENGL_GetDrawableSize(void* window, int32_t *x, int32_t *y)
 FNA3D_Device* OPENGL_CreateDevice(
 	FNA3D_PresentationParameters *presentationParameters
 ) {
-	int flags;
-	int depthSize, stencilSize;
+	int32_t flags;
+	int32_t depthSize, stencilSize;
 	SDL_SysWMinfo wmInfo;
 	const char *renderer, *version, *vendor;
 	char driverInfo[256];
 	uint8_t debugMode;
-	int i, j;
-	int numExtensions, numSamplers, numAttributes, numAttachments;
+	int32_t i;
+	int32_t numExtensions, numSamplers, numAttributes, numAttachments;
 	OpenGLDevice *device;
 	FNA3D_Device *result;
 
@@ -4191,7 +5059,7 @@ FNA3D_Device* OPENGL_CreateDevice(
 	);
 	SDL_LogInfo(
 		SDL_LOG_CATEGORY_APPLICATION,
-		"IGLDevice: OpenGLDevice\n%s",
+		"FNA3D Driver: OpenGL\n%s",
 		driverInfo
 	);
 
@@ -4199,7 +5067,7 @@ FNA3D_Device* OPENGL_CreateDevice(
 	LoadEntryPoints(device, driverInfo, debugMode);
 
 	/* FIXME: REMOVE ME ASAP! TERRIBLE HACK FOR ANGLE! */
-	if (!SDL_strstr(renderer, "Direct3D11"))
+	if (SDL_strstr(renderer, "Direct3D11") != NULL)
 	{
 		device->supports_ARB_draw_elements_base_vertex = 0;
 	}
@@ -4321,7 +5189,7 @@ FNA3D_Device* OPENGL_CreateDevice(
 		device->attachmentTypes[i] = 0;
 		device->currentAttachments[i] = 0;
 		device->currentAttachmentTypes[i] = GL_TEXTURE_2D;
-		device->drawBuffersArray[i] = GL_COLOR_ATTACHMENT0 + 1;
+		device->drawBuffersArray[i] = GL_COLOR_ATTACHMENT0 + i;
 	}
 	device->numAttachments = numAttachments;
 
@@ -4356,111 +5224,19 @@ FNA3D_Device* OPENGL_CreateDevice(
 		device->glTexEnvi(GL_POINT_SPRITE, GL_COORD_REPLACE, 1);
 	}
 
-	/* Blend State Variables */
-	device->alphaBlendEnable = 0;
-	device->blendColor.r = 0;
-	device->blendColor.g = 0;
-	device->blendColor.b = 0;
-	device->blendColor.a = 0;
-	device->blendOp = FNA3D_BLENDFUNCTION_ADD;
-	device->blendOpAlpha = FNA3D_BLENDFUNCTION_ADD;
-	device->srcBlend = FNA3D_BLEND_ONE;
-	device->dstBlend = FNA3D_BLEND_ZERO;
-	device->srcBlendAlpha = FNA3D_BLEND_ONE;
-	device->dstBlendAlpha = FNA3D_BLEND_ZERO;
+	/* Initialize device members not covered by SDL_memset('\0') */
+	device->dstBlend = FNA3D_BLEND_ZERO; /* ZERO is really 1. -caleb */
+	device->dstBlendAlpha = FNA3D_BLEND_ZERO; /* ZERO is really 1. -caleb */
 	device->colorWriteEnable = FNA3D_COLORWRITECHANNELS_ALL;
 	device->colorWriteEnable1 = FNA3D_COLORWRITECHANNELS_ALL;
 	device->colorWriteEnable2 = FNA3D_COLORWRITECHANNELS_ALL;
 	device->colorWriteEnable3 = FNA3D_COLORWRITECHANNELS_ALL;
 	device->multiSampleMask = -1; /* AKA 0xFFFFFFFF, ugh -flibit */
-
-	/* Depth Stencil State Variables */
-	device->zEnable = 0;
-	device->zWriteEnable = 0;
-	device->depthFunc = 0;
-	device->stencilEnable = 0;
 	device->stencilWriteMask = -1; /* AKA 0xFFFFFFFF, ugh -flibit */
-	device->separateStencilEnable = 0;
-	device->stencilRef = 0;
 	device->stencilMask = -1; /* AKA 0xFFFFFFFF, ugh -flibit */
-	device->stencilFunc = FNA3D_COMPAREFUNCTION_ALWAYS;
-	device->stencilFail = FNA3D_STENCILOPERATION_KEEP;
-	device->stencilZFail = FNA3D_STENCILOPERATION_KEEP;
-	device->stencilPass = FNA3D_STENCILOPERATION_KEEP;
-	device->ccwStencilFunc = FNA3D_COMPAREFUNCTION_ALWAYS;
-	device->ccwStencilFail = FNA3D_STENCILOPERATION_KEEP;
-	device->ccwStencilZFail = FNA3D_STENCILOPERATION_KEEP;
-	device->ccwStencilPass = FNA3D_STENCILOPERATION_KEEP;
-
-	/* Rasterizer State Variables */
-	device->scissorTestEnable = 0;
-	device->cullFrontFace = FNA3D_CULLMODE_NONE;
-	device->fillMode = FNA3D_FILLMODE_SOLID;
-	device->depthBias = 0.0f;
-	device->slopeScaleDepthBias = 0.0f;
 	device->multiSampleEnable = 1;
-
-	/* Viewport State Variables */
-	device->scissorRect.x = 0;
-	device->scissorRect.y = 0;
-	device->scissorRect.w = 0;
-	device->scissorRect.h = 0;
-	device->viewport.x = 0;
-	device->viewport.y = 0;
-	device->viewport.w = 0;
-	device->viewport.h = 0;
-	device->viewport.minDepth = 0;
-	device->viewport.maxDepth = 0;
-	device->depthRangeMin = 0.0f;
 	device->depthRangeMax = 1.0f;
-
-	/* Buffer Binding Cache Variables */
-	device->currentVertexBuffer = 0;
-	device->currentIndexBuffer = 0;
-
-	/* ld, or LastDrawn, effect/vertex attributes */
-	device->ldBaseVertex = -1;
-	device->ldVertexDeclaration.vertexStride = 0;
-	device->ldVertexDeclaration.elementCount = 0;
-	device->ldVertexDeclaration.elements = NULL;
-	device->ldPointer = NULL;
-	device->ldEffect = NULL;
-	device->ldTechnique = NULL;
-	device->ldPass = 0;
-
-	/* Some vertex declarations may have overlapping attributes :/ */
-	for (i = 0; i < MOJOSHADER_USAGE_TOTAL; i += 1)
-	{
-		for (j = 0; j < 16; j += 1)
-		{
-			device->attrUse[i][j] = 0;
-		}
-	}
-
-	/* Render Target Cache Variables */
-	device->currentReadFramebuffer = 0;
-	device->currentDrawFramebuffer = 0;
-	device->targetFramebuffer = 0;
-	device->resolveFramebufferRead = 0;
-	device->resolveFramebufferDraw = 0;
-	device->currentDrawBuffers = 0;
-	device->currentRenderbuffer = 0;
-	device->currentDepthStencilFormat = FNA3D_DEPTHFORMAT_NONE;
-
-	/* Clear Cache Variables */
-	device->currentClearColor.x = 0;
-	device->currentClearColor.y = 0;
-	device->currentClearColor.z = 0;
-	device->currentClearColor.w = 0;
 	device->currentClearDepth = 1.0f;
-	device->currentClearStencil = 0;
-
-	/* MojoShader Variables */
-	device->currentEffect = NULL;
-	device->currentTechnique = NULL;
-	device->currentPass = 0;
-	device->renderTargetBound = 0;
-	device->effectApplied = 0;
 
 	/* The creation thread will be the "main" thread */
 	device->threadID = SDL_ThreadID();
@@ -4480,3 +5256,5 @@ FNA3D_Driver OpenGLDriver = {
 };
 
 #endif /* FNA3D_DRIVER_OPENGL */
+
+/* vim: set noexpandtab shiftwidth=8 tabstop=8: */

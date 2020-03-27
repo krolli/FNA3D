@@ -155,7 +155,7 @@ struct FNA3D_Device
 
 	void (*ApplyVertexBufferBindings)(
 		void* driverData,
-		/* FIXME: Oh shit VertexBufferBinding[] bindings, */
+		FNA3D_VertexBufferBinding *bindings,
 		int32_t numBindings,
 		uint8_t bindingsUpdated,
 		int32_t baseVertex
@@ -172,14 +172,15 @@ struct FNA3D_Device
 
 	void (*SetRenderTargets)(
 		void* driverData,
-		/* FIXME: Oh shit RenderTargetBinding[] renderTargets, */
+		FNA3D_RenderTargetBinding *renderTargets,
+		int32_t numRenderTargets,
 		FNA3D_Renderbuffer *renderbuffer,
 		FNA3D_DepthFormat depthFormat
 	);
 
 	void (*ResolveTarget)(
-		void* driverData
-		/* FIXME: Oh shit RenderTargetBinding target */
+		void* driverData,
+		FNA3D_RenderTargetBinding *target
 	);
 
 	/* Backbuffer Functions */
@@ -429,7 +430,8 @@ struct FNA3D_Device
 
 	FNA3D_Effect* (*CreateEffect)(
 		void* driverData,
-		uint8_t *effectCode
+		uint8_t *effectCode,
+		uint32_t effectCodeLength
 	);
 	FNA3D_Effect* (*CloneEffect)(
 		void* driverData,
@@ -547,6 +549,7 @@ struct FNA3D_Device
 	ASSIGN_DRIVER_FUNC(GenDepthStencilRenderbuffer, name) \
 	ASSIGN_DRIVER_FUNC(AddDisposeRenderbuffer, name) \
 	ASSIGN_DRIVER_FUNC(GenVertexBuffer, name) \
+	ASSIGN_DRIVER_FUNC(GenIndexBuffer, name) \
 	ASSIGN_DRIVER_FUNC(AddDisposeVertexBuffer, name) \
 	ASSIGN_DRIVER_FUNC(SetVertexBufferData, name) \
 	ASSIGN_DRIVER_FUNC(GetVertexBufferData, name) \
@@ -592,3 +595,5 @@ extern FNA3D_Driver ThreadedGLDriver;
 extern FNA3D_Driver GNMXDriver;
 
 #endif /* FNA3D_DRIVER_H */
+
+/* vim: set noexpandtab shiftwidth=8 tabstop=8: */
