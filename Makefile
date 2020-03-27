@@ -33,6 +33,7 @@ CFLAGS += -g -O3
 
 # Drivers
 DEFINES += -DFNA3D_DRIVER_OPENGL
+DEFINES += -DFNA3D_DRIVER_VULKAN
 
 # Includes/Libraries
 INCLUDES = -Iinclude -IMojoShader `sdl2-config --cflags`
@@ -59,7 +60,8 @@ endif
 # Source
 FNA3DSRC = \
 	src/FNA3D.c \
-	src/FNA3D_Driver_OpenGL.c
+	src/FNA3D_Driver_OpenGL.c \
+	src/FNA3D_Driver_Vulkan.c
 MOJOSHADERSRC = \
 	MojoShader/mojoshader.c \
 	MojoShader/mojoshader_effects.c \
