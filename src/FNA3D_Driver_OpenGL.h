@@ -29,6 +29,8 @@
 #ifndef FNA3D_DRIVER_OPENGL_H
 #define FNA3D_DRIVER_OPENGL_H
 
+#include <stdint.h>
+
 /* Types */
 typedef unsigned int	GLenum;
 typedef unsigned int	GLbitfield;
