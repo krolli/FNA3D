@@ -71,6 +71,7 @@ endif()
 add_library(FNA3D
 	# Public Headers
 	include/FNA3D.h
+	include/FNA3D_Image.h
 	# Internal Headers
 	src/FNA3D_CommandStream.h
 	src/FNA3D_Driver.h
