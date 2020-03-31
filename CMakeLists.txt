@@ -6,6 +6,9 @@ project(FNA3D)
 # Options
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
+# for easy testing
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ./FNA3DMinimal/lib64)
+
 # C99 Requirement
 if(${CMAKE_VERSION} VERSION_LESS "3.1.3")
 	message(WARNING "Your CMake version is too old, set -std=c99 yourself!")
