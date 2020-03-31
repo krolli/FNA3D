@@ -48,6 +48,7 @@ endif()
 # Defines
 add_definitions(
 	-DFNA3D_DRIVER_OPENGL
+	-DFNA3D_DRIVER_VULKAN
 )
 add_definitions(
 	-DMOJOSHADER_NO_VERSION_INCLUDE
@@ -76,11 +77,16 @@ add_library(FNA3D
 	src/FNA3D_Driver.h
 	src/FNA3D_Driver_OpenGL.h
 	src/FNA3D_Driver_OpenGL_glfuncs.h
+	src/FNA3D_Driver_Vulkan.h
+	src/FNA3D_Driver_Vulkan_device_funcs.h
+	src/FNA3D_Driver_Vulkan_global_funcs.h
+	src/FNA3D_Driver_Vulkan_instance_funcs.h
 	# Source Files
 	src/FNA3D.c
 	src/FNA3D_CommandStream.c
 	src/FNA3D_Driver_OpenGL.c
 	src/FNA3D_Image.c
+	src/FNA3D_Driver_Vulkan.c
 )
 add_library(mojoshader STATIC
 	MojoShader/mojoshader.c
@@ -101,6 +107,7 @@ endif()
 target_include_directories(FNA3D PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/Vulkan-Headers/include/vulkan>
 )
 target_include_directories(mojoshader PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/MojoShader>
