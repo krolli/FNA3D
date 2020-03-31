@@ -56,11 +56,88 @@ static const FNA3D_Driver *drivers[] = {
 	NULL
 };
 
+/* Logging */
+
+static void FNA3D_Default_LogInfo(const char *msg)
+{
+	SDL_LogInfo(
+		SDL_LOG_CATEGORY_APPLICATION,
+		"%s",
+		msg
+	);
+}
+
+static void FNA3D_Default_LogWarn(const char *msg)
+{
+	SDL_LogWarn(
+		SDL_LOG_CATEGORY_APPLICATION,
+		"%s",
+		msg
+	);
+}
+
+static void FNA3D_Default_LogError(const char *msg)
+{
+	SDL_LogError(
+		SDL_LOG_CATEGORY_APPLICATION,
+		"%s",
+		msg
+	);
+}
+
+FNA3D_LogFunc FNA3D_LogInfoFunc = FNA3D_Default_LogInfo;
+FNA3D_LogFunc FNA3D_LogWarnFunc = FNA3D_Default_LogWarn;
+FNA3D_LogFunc FNA3D_LogErrorFunc = FNA3D_Default_LogError;
+
+#define MAX_MESSAGE_SIZE 1024
+
+void FNA3D_LogInfo(const char *fmt, ...)
+{
+	char msg[MAX_MESSAGE_SIZE];
+	va_list ap;
+	va_start(ap, fmt);
+	SDL_vsnprintf(msg, sizeof(msg), fmt, ap);
+	va_end(ap);
+	FNA3D_LogInfoFunc(msg);
+}
+
+void FNA3D_LogWarn(const char *fmt, ...)
+{
+	char msg[MAX_MESSAGE_SIZE];
+	va_list ap;
+	va_start(ap, fmt);
+	SDL_vsnprintf(msg, sizeof(msg), fmt, ap);
+	va_end(ap);
+	FNA3D_LogWarnFunc(msg);
+}
+
+void FNA3D_LogError(const char *fmt, ...)
+{
+	char msg[MAX_MESSAGE_SIZE];
+	va_list ap;
+	va_start(ap, fmt);
+	SDL_vsnprintf(msg, sizeof(msg), fmt, ap);
+	va_end(ap);
+	FNA3D_LogErrorFunc(msg);
+}
+
+#undef MAX_MESSAGE_SIZE
+
+void FNA3D_HookLogFunctions(
+	FNA3D_LogFunc info,
+	FNA3D_LogFunc warn,
+	FNA3D_LogFunc error
+) {
+	FNA3D_LogInfoFunc = info;
+	FNA3D_LogWarnFunc = warn;
+	FNA3D_LogErrorFunc = error;
+}
+
+/* Driver Functions */
+
 static int32_t selectedDriver = -1;
 
-/* Init/Quit */
-
-uint32_t FNA3D_PrepareWindowAttributes(uint8_t debugMode)
+uint32_t FNA3D_PrepareWindowAttributes()
 {
 	uint32_t result = 0;
 	uint32_t i;
@@ -74,7 +151,7 @@ uint32_t FNA3D_PrepareWindowAttributes(uint8_t debugMode)
 				continue;
 			}
 		}
-		if (drivers[i]->PrepareWindowAttributes(debugMode, &result))
+		if (drivers[i]->PrepareWindowAttributes(&result))
 		{
 			break;
 		}
@@ -82,10 +159,7 @@ uint32_t FNA3D_PrepareWindowAttributes(uint8_t debugMode)
 	}
 	if (drivers[i] == NULL)
 	{
-		SDL_LogError(
-			SDL_LOG_CATEGORY_APPLICATION,
-			"No supported FNA3D driver found!"
-		);
+		FNA3D_LogError("No supported FNA3D driver found!");
 	}
 	else
 	{
@@ -98,29 +172,29 @@ FNA3DAPI void FNA3D_GetDrawableSize(void* window, int32_t *x, int32_t *y)
 {
 	if (selectedDriver < 0)
 	{
-		SDL_LogError(
-			SDL_LOG_CATEGORY_APPLICATION,
-			"Call FNA3D_PrepareWindowAttributes first!"
-		);
+		FNA3D_LogError("Call FNA3D_PrepareWindowAttributes first!");
 		return;
 	}
 
 	drivers[selectedDriver]->GetDrawableSize(window, x, y);
 }
 
+/* Init/Quit */
+
 FNA3D_Device* FNA3D_CreateDevice(
-	FNA3D_PresentationParameters *presentationParameters
+	FNA3D_PresentationParameters *presentationParameters,
+	uint8_t debugMode
 ) {
 	if (selectedDriver < 0)
 	{
-		SDL_LogError(
-			SDL_LOG_CATEGORY_APPLICATION,
-			"Call FNA3D_PrepareWindowAttributes first!"
-		);
+		FNA3D_LogError("Call FNA3D_PrepareWindowAttributes first!");
 		return NULL;
 	}
 
-	return drivers[selectedDriver]->CreateDevice(presentationParameters);
+	return drivers[selectedDriver]->CreateDevice(
+		presentationParameters,
+		debugMode
+	);
 }
 
 void FNA3D_DestroyDevice(FNA3D_Device *device)
@@ -1328,8 +1402,6 @@ void FNA3D_SetStringMarker(FNA3D_Device *device, const char *text)
 	}
 	device->SetStringMarker(device->driverData, text);
 }
-
-/* TODO: Debug callback function...? */
 
 /* Buffer Objects */
 

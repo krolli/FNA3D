@@ -435,12 +435,22 @@ typedef struct FNA3D_RenderTargetBinding
 
 /* Functions */
 
+/* Logging */
+
+typedef void (FNA3DCALL * FNA3D_LogFunc)(const char *msg);
+
+FNA3DAPI void FNA3D_HookLogFunctions(
+	FNA3D_LogFunc info,
+	FNA3D_LogFunc warn,
+	FNA3D_LogFunc error
+);
+
 /* Init/Quit */
 
 /* This should be called before window creation!
  * Returns an SDL_WindowFlags mask.
  */
-FNA3DAPI uint32_t FNA3D_PrepareWindowAttributes(uint8_t debugMode);
+FNA3DAPI uint32_t FNA3D_PrepareWindowAttributes();
 
 /* This should be called after window creation!
  * Use this for detecting high-DPI windows.
@@ -448,7 +458,8 @@ FNA3DAPI uint32_t FNA3D_PrepareWindowAttributes(uint8_t debugMode);
 FNA3DAPI void FNA3D_GetDrawableSize(void* window, int32_t *x, int32_t *y);
 
 FNA3DAPI FNA3D_Device* FNA3D_CreateDevice(
-	FNA3D_PresentationParameters *presentationParameters
+	FNA3D_PresentationParameters *presentationParameters,
+	uint8_t debugMode
 );
 
 FNA3DAPI void FNA3D_DestroyDevice(FNA3D_Device *device);
@@ -906,8 +917,6 @@ FNA3DAPI int32_t FNA3D_GetMaxMultiSampleCount(FNA3D_Device *device);
 /* Debugging */
 
 FNA3DAPI void FNA3D_SetStringMarker(FNA3D_Device *device, const char *text);
-
-/* TODO: Debug callback function...? */
 
 /* Buffer Objects */
 
