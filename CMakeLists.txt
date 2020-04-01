@@ -102,6 +102,11 @@ add_library(mojoshader STATIC
 	MojoShader/profiles/mojoshader_profile_metal.c
 	MojoShader/profiles/mojoshader_profile_spirv.c
 )
+
+# Build flags
+if(NOT MSVC)
+	set_property(TARGET FNA3D PROPERTY COMPILE_FLAGS "-std=c99 -Wall -pedantic")
+endif()
 if(BUILD_SHARED_LIBS)
 	set_property(TARGET mojoshader PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
