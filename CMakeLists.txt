@@ -70,6 +70,7 @@ if(APPLE)
 else()
 	add_definitions(
 		-DFNA3D_DRIVER_MODERNGL
+		-DFNA3D_DRIVER_THREADEDGL
 		-DSUPPORT_PROFILE_METAL=0
 	)
 endif()
@@ -95,6 +96,7 @@ add_library(FNA3D
 	src/FNA3D_CommandStream.c
 	src/FNA3D_Driver_OpenGL.c
 	src/FNA3D_Driver_ModernGL.c
+	src/FNA3D_Driver_ThreadedGL.c
 	src/FNA3D_Image.c
 	src/FNA3D_Driver_Vulkan.c
 )
