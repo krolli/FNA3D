@@ -88,6 +88,8 @@ add_library(FNA3D
 	src/FNA3D_Driver_Vulkan_device_funcs.h
 	src/FNA3D_Driver_Vulkan_global_funcs.h
 	src/FNA3D_Driver_Vulkan_instance_funcs.h
+	src/FNA3D_Driver_ModernGL.h
+	src/FNA3D_Driver_ModernGL_glfuncs.h
 	# Source Files
 	src/FNA3D.c
 	src/FNA3D_CommandStream.c
