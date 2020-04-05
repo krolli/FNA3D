@@ -24,10 +24,8 @@
  *
  */
 
-#include <stdint.h>
-
-#ifndef FNA3D_DRIVER_OPENGL_H
-#define FNA3D_DRIVER_OPENGL_H
+#ifndef FNA3D_DRIVER_MODERNGL_H
+#define FNA3D_DRIVER_MODERNGL_H
 
 #include <stdint.h>
 
@@ -170,10 +168,8 @@ typedef unsigned char	GLboolean;
 
 /* Texture Formats */
 #define GL_RED  					0x1903
-#define GL_ALPHA					0x1906
 #define GL_RGB  					0x1907
 #define GL_RGBA 					0x1908
-#define GL_RGB8 					0x8051
 #define GL_RGBA8					0x8058
 #define GL_RGBA4					0x8056
 #define GL_RGB5_A1					0x8057
@@ -183,6 +179,7 @@ typedef unsigned char	GLboolean;
 #define GL_DEPTH_COMPONENT16				0x81A5
 #define GL_DEPTH_COMPONENT24				0x81A6
 #define GL_RG   					0x8227
+#define GL_R8						0x8229
 #define GL_RG8  					0x822B
 #define GL_RG16 					0x822C
 #define GL_R16F 					0x822D
@@ -196,6 +193,7 @@ typedef unsigned char	GLboolean;
 #define GL_COMPRESSED_RGBA_S3TC_DXT1_EXT		0x83F1
 #define GL_COMPRESSED_RGBA_S3TC_DXT3_EXT		0x83F2
 #define GL_COMPRESSED_RGBA_S3TC_DXT5_EXT		0x83F3
+#define GL_RGB565					0x8D62
 
 /* Texture Internal Formats */
 #define GL_DEPTH_COMPONENT				0x1902
@@ -218,11 +216,21 @@ typedef unsigned char	GLboolean;
 #define GL_MAX_TEXTURE_IMAGE_UNITS			0x8872
 #define GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS		0x8B4C
 
+/* Texture Swizzling */
+#define GL_TEXTURE_SWIZZLE_R				0x8E42
+#define GL_TEXTURE_SWIZZLE_G				0x8E43
+#define GL_TEXTURE_SWIZZLE_B				0x8E44
+#define GL_TEXTURE_SWIZZLE_A				0x8E45
+
 /* Buffer objects */
 #define GL_ARRAY_BUFFER 				0x8892
 #define GL_ELEMENT_ARRAY_BUFFER 			0x8893
-#define GL_STREAM_DRAW  				0x88E0
 #define GL_STATIC_DRAW  				0x88E4
+#define GL_MAP_READ_BIT					0x0001
+#define GL_MAP_WRITE_BIT				0x0002
+#define GL_MAP_PERSISTENT_BIT				0x0040
+#define GL_MAP_COHERENT_BIT				0x0080
+#define GL_DYNAMIC_STORAGE_BIT				0x0100
 #define GL_MAX_VERTEX_ATTRIBS				0x8869
 
 /* Render targets */
@@ -293,17 +301,14 @@ typedef void (GLAPIENTRY *DEBUGPROC)(
 );
 
 /* Function typedefs */
-#define GL_PROC(ext, ret, func, parms) \
+#define GL_PROC(ret, func, parms) \
 	typedef ret (GLAPIENTRY *glfntype_##func) parms;
-#define GL_PROC_EXT(ext, fallbacl, ret, func, parms) \
+#define GL_PROC_EXT(ext, fallback, ret, func, parms) \
 	typedef ret (GLAPIENTRY *glfntype_##func) parms;
-#include "FNA3D_Driver_OpenGL_glfuncs.h"
+#include "FNA3D_Driver_ModernGL_glfuncs.h"
 #undef GL_PROC
 #undef GL_PROC_EXT
 
-/* glGetString is a bit different since we load it early */
-typedef const GLubyte* (GLAPIENTRY *glfntype_glGetString)(GLenum a);
-
-#endif /* FNA3D_DRIVER_OPENGL_H */
+#endif /* FNA3D_DRIVER_MODERNGL_H */
 
 /* vim: set noexpandtab shiftwidth=8 tabstop=8: */

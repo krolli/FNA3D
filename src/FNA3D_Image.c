@@ -28,28 +28,51 @@
 
 #include <SDL.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#ifndef __clang__
+#pragma GCC diagnostic ignored "-Wmisleading-indentation"
+#endif
+
+#ifndef __STDC_WANT_SECURE_LIB__
+#define __STDC_WANT_SECURE_LIB__ 1
+#endif
+#define sprintf_s SDL_snprintf
+
 #define ceilf SDL_ceilf
 #define floorf SDL_floorf
 #define ldexp SDL_scalbn
-#define memcmp SDL_memcmp
-#define memcpy SDL_memcpy
-#define memmove SDL_memmove
-#define memset SDL_memset
 #define pow SDL_pow
 #define strcmp SDL_strcmp
 #define strlen  SDL_strlen
 #define strncmp SDL_strncmp
 #define strtol SDL_strtol
 
-#define __STDC_WANT_SECURE_LIB__
-#define sprintf_s SDL_snprintf
+#ifdef memcmp
+#undef memcmp
+#endif
+#define memcmp SDL_memcmp
+#ifdef memcpy
+#undef memcpy
+#endif
+#define memcpy SDL_memcpy
+#ifdef memmove
+#undef memmove
+#endif
+#define memmove SDL_memmove
+#ifdef memset
+#undef memset
+#endif
+#define memset SDL_memset
 
-/* These are per the spec... */
+/* These are per the Texture2D.FromStream spec */
 #define STBI_ONLY_GIF
 #define STBI_ONLY_PNG
 #define STBI_ONLY_JPEG
-/* ... and this is for me -flibit */
-#define STBI_ONLY_BMP
+
+/* These are per the Texture2D.SaveAs* spec */
+#define STBIW_ONLY_PNG
+#define STBIW_ONLY_JPEG
 
 #define STBI_NO_STDIO
 #define STB_IMAGE_STATIC
@@ -66,7 +89,7 @@
 #define MZ_ASSERT(x) SDL_assert(x)
 #include "miniz.h"
 
-/* Thanks Dan Gibson! */
+/* Thanks Daniel Gibson! */
 static unsigned char* dgibson_stbi_zlib_compress(
 	unsigned char *data,
 	int data_len,
@@ -92,9 +115,11 @@ static unsigned char* dgibson_stbi_zlib_compress(
 #define STBIW_MALLOC SDL_malloc
 #define STBIW_REALLOC SDL_realloc
 #define STBIW_FREE SDL_free
-#define STBIW_ZLIB_COMPRESS  dgibson_stbi_zlib_compress
+#define STBIW_ZLIB_COMPRESS dgibson_stbi_zlib_compress
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+
+#pragma GCC diagnostic pop
 
 /* Image Read API */
 
@@ -189,7 +214,7 @@ uint8_t* FNA3D_Image_Load(
 			*h = (int) (surface->h * scale);
 		}
 
-		// Alloc surface, blit!
+		/* Alloc surface, blit! */
 		newSurface = SDL_CreateRGBSurface(
 			0,
 			*w,
@@ -264,21 +289,24 @@ void FNA3D_Image_SavePNG(
 	int32_t dstH,
 	uint8_t *data
 ) {
+	SDL_Surface *surface, *scaledSurface;
+	uint8_t *pixels;
+	uint8_t scale = (srcW != dstW) || (srcH != dstH);
+
 	/* Only blit to scale, the format is already correct */
-	SDL_Surface *scaledSurface;
-	SDL_Surface *surface = SDL_CreateRGBSurfaceFrom(
-		data,
-		srcW,
-		srcH,
-		8 * 4,
-		srcW * 4,
-		0x000000FF,
-		0x0000FF00,
-		0x00FF0000,
-		0xFF000000
-	);
-	if ((srcW != dstW) || (srcH != dstH))
+	if (scale)
 	{
+		surface = SDL_CreateRGBSurfaceFrom(
+			data,
+			srcW,
+			srcH,
+			8 * 4,
+			srcW * 4,
+			0x000000FF,
+			0x0000FF00,
+			0x00FF0000,
+			0xFF000000
+		);
 		scaledSurface = SDL_CreateRGBSurface(
 			0,
 			dstW,
@@ -292,7 +320,11 @@ void FNA3D_Image_SavePNG(
 		SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_NONE);
 		SDL_BlitScaled(surface, NULL, scaledSurface, NULL);
 		SDL_FreeSurface(surface);
-		surface = scaledSurface;
+		pixels = (uint8_t*) scaledSurface->pixels;
+	}
+	else
+	{
+		pixels = data;
 	}
 
 	/* Write the image data, finally. */
@@ -302,12 +334,15 @@ void FNA3D_Image_SavePNG(
 		dstW,
 		dstH,
 		4,
-		surface->pixels,
-		surface->pitch
+		pixels,
+		dstW * 4
 	);
 
 	/* Clean up. We out. */
-	SDL_FreeSurface(surface);
+	if (scale)
+	{
+		SDL_FreeSurface(scaledSurface);
+	}
 }
 
 void FNA3D_Image_SaveJPG(
@@ -361,3 +396,5 @@ void FNA3D_Image_SaveJPG(
 	/* Clean up. We out. */
 	SDL_FreeSurface(surface);
 }
+
+/* vim: set noexpandtab shiftwidth=8 tabstop=8: */

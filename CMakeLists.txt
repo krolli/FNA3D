@@ -6,9 +6,6 @@ project(FNA3D)
 # Options
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
-# for easy testing
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ./FNA3DMinimal/lib64)
-
 # C99 Requirement
 if(${CMAKE_VERSION} VERSION_LESS "3.1.3")
 	message(WARNING "Your CMake version is too old, set -std=c99 yourself!")
@@ -21,7 +18,7 @@ endif()
 # Version
 SET(LIB_MAJOR_VERSION "0")
 SET(LIB_MINOR_VERSION "20")
-SET(LIB_REVISION "03")
+SET(LIB_REVISION "04")
 SET(LIB_VERSION "${LIB_MAJOR_VERSION}.${LIB_MINOR_VERSION}.${LIB_REVISION}")
 
 # Build Type
@@ -51,10 +48,10 @@ endif()
 # Defines
 add_definitions(
 	-DFNA3D_DRIVER_OPENGL
-	-DFNA3D_DRIVER_VULKAN
 )
 add_definitions(
 	-DMOJOSHADER_NO_VERSION_INCLUDE
+	-DMOJOSHADER_USE_SDL_STDLIB
 	-DMOJOSHADER_EFFECT_SUPPORT
 	-DMOJOSHADER_DEPTH_CLIPPING
 	-DMOJOSHADER_FLIP_RENDERTARGET
@@ -67,7 +64,12 @@ add_definitions(
 if(APPLE)
 	add_definitions(-DSUPPORT_PROFILE_METAL=1)
 else()
-	add_definitions(-DSUPPORT_PROFILE_METAL=0)
+	add_definitions(
+		-DFNA3D_DRIVER_MODERNGL
+		-DFNA3D_DRIVER_THREADEDGL
+		-DFNA3D_DRIVER_VULKAN
+		-DSUPPORT_PROFILE_METAL=0
+	)
 endif()
 
 # Source lists
@@ -80,15 +82,22 @@ add_library(FNA3D
 	src/FNA3D_Driver.h
 	src/FNA3D_Driver_OpenGL.h
 	src/FNA3D_Driver_OpenGL_glfuncs.h
+	src/FNA3D_Driver_ModernGL.h
+	src/FNA3D_Driver_ModernGL_glfuncs.h
 	src/FNA3D_Driver_Vulkan.h
 	src/FNA3D_Driver_Vulkan_device_funcs.h
 	src/FNA3D_Driver_Vulkan_global_funcs.h
 	src/FNA3D_Driver_Vulkan_instance_funcs.h
+	src/FNA3D_PipelineCache.h
 	# Source Files
 	src/FNA3D.c
 	src/FNA3D_CommandStream.c
 	src/FNA3D_Driver_OpenGL.c
+	src/FNA3D_Driver_ModernGL.c
+	src/FNA3D_Driver_ThreadedGL.c
 	src/FNA3D_Driver_Vulkan.c
+	src/FNA3D_Image.c
+	src/FNA3D_PipelineCache.c
 )
 add_library(mojoshader STATIC
 	MojoShader/mojoshader.c
@@ -101,6 +110,11 @@ add_library(mojoshader STATIC
 	MojoShader/profiles/mojoshader_profile_metal.c
 	MojoShader/profiles/mojoshader_profile_spirv.c
 )
+
+# Build flags
+if(NOT MSVC)
+	set_property(TARGET FNA3D PROPERTY COMPILE_FLAGS "-std=c99 -Wall -pedantic")
+endif()
 if(BUILD_SHARED_LIBS)
 	set_property(TARGET mojoshader PROPERTY POSITION_INDEPENDENT_CODE ON)
 endif()
@@ -115,8 +129,6 @@ target_include_directories(mojoshader PUBLIC
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/MojoShader>
 )
 
-target_compile_options(FNA3D PUBLIC -Wall)
-
 # MinGW builds should statically link libgcc
 if(MINGW)
 	target_link_libraries(FNA3D PRIVATE -static-libgcc)
@@ -128,38 +140,30 @@ set_target_properties(FNA3D PROPERTIES OUTPUT_NAME "FNA3D"
 	SOVERSION ${LIB_MAJOR_VERSION}
 )
 
+# Internal Dependencies
+target_link_libraries(FNA3D PRIVATE mojoshader ${LOBJC})
+
 # SDL2 Dependency
 if (DEFINED SDL2_INCLUDE_DIRS AND DEFINED SDL2_LIBRARIES)
 	message(STATUS "using pre-defined SDL2 variables SDL2_INCLUDE_DIRS and SDL2_LIBRARIES")
 	target_include_directories(FNA3D PUBLIC "$<BUILD_INTERFACE:${SDL2_INCLUDE_DIRS}>")
+	target_include_directories(mojoshader PUBLIC "$<BUILD_INTERFACE:${SDL2_INCLUDE_DIRS}>")
 	target_link_libraries(FNA3D PUBLIC ${SDL2_LIBRARIES})
-	if(INSTALL_MINGW_DEPENDENCIES)
-		install_shared_libs(${SDL2_LIBRARIES} DESTINATION bin NO_INSTALL_SYMLINKS)
-	endif()
 else()
 	# Only try to autodetect if both SDL2 variables aren't explicitly set
 	find_package(SDL2 CONFIG)
 	if (TARGET SDL2::SDL2)
 		message(STATUS "using TARGET SDL2::SDL2")
 		target_link_libraries(FNA3D PUBLIC SDL2::SDL2)
-		if(INSTALL_MINGW_DEPENDENCIES)
-			install_shared_libs(TARGETS SDL2::SDL2 DESTINATION bin NO_INSTALL_SYMLINKS REQUIRED)
-		endif()
+		target_link_libraries(mojoshader PUBLIC SDL2::SDL2)
 	elseif (TARGET SDL2)
 		message(STATUS "using TARGET SDL2")
 		target_link_libraries(FNA3D PUBLIC SDL2)
-		if(INSTALL_MINGW_DEPENDENCIES)
-			install_shared_libs(TARGETS SDL2 DESTINATION bin NO_INSTALL_SYMLINKS REQUIRED)
-		endif()
+		target_link_libraries(mojoshader PUBLIC SDL2)
 	else()
 		message(STATUS "no TARGET SDL2::SDL2, or SDL2, using variables")
 		target_include_directories(FNA3D PUBLIC "$<BUILD_INTERFACE:${SDL2_INCLUDE_DIRS}>")
+		target_include_directories(mojoshader PUBLIC "$<BUILD_INTERFACE:${SDL2_INCLUDE_DIRS}>")
 		target_link_libraries(FNA3D PUBLIC ${SDL2_LIBRARIES})
-		if(INSTALL_MINGW_DEPENDENCIES)
-			install_shared_libs(${SDL2_LIBRARIES} DESTINATION bin NO_INSTALL_SYMLINKS)
-		endif()
 	endif()
 endif()
-
-# Other Dependencies
-target_link_libraries(FNA3D PRIVATE mojoshader ${LOBJC})
