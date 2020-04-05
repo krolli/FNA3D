@@ -83,14 +83,14 @@ add_library(FNA3D
 	# Internal Headers
 	src/FNA3D_CommandStream.h
 	src/FNA3D_Driver.h
+	src/FNA3D_Driver_ModernGL.h
+	src/FNA3D_Driver_ModernGL_glfuncs.h
 	src/FNA3D_Driver_OpenGL.h
 	src/FNA3D_Driver_OpenGL_glfuncs.h
 	src/FNA3D_Driver_Vulkan.h
 	src/FNA3D_Driver_Vulkan_device_funcs.h
 	src/FNA3D_Driver_Vulkan_global_funcs.h
 	src/FNA3D_Driver_Vulkan_instance_funcs.h
-	src/FNA3D_Driver_ModernGL.h
-	src/FNA3D_Driver_ModernGL_glfuncs.h
 	src/FNA3D_PipelineCache.h
 	# Source Files
 	src/FNA3D.c
@@ -98,8 +98,8 @@ add_library(FNA3D
 	src/FNA3D_Driver_OpenGL.c
 	src/FNA3D_Driver_ModernGL.c
 	src/FNA3D_Driver_ThreadedGL.c
-	src/FNA3D_Image.c
 	src/FNA3D_Driver_Vulkan.c
+	src/FNA3D_Image.c
 	src/FNA3D_PipelineCache.c
 )
 add_library(mojoshader STATIC
