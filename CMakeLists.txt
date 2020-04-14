@@ -6,6 +6,9 @@ project(FNA3D)
 # Options
 option(BUILD_SHARED_LIBS "Build shared library" ON)
 
+# for easy testing
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ./FNA3DMinimal/lib64)
+
 # C99 Requirement
 if(${CMAKE_VERSION} VERSION_LESS "3.1.3")
 	message(WARNING "Your CMake version is too old, set -std=c99 yourself!")
@@ -48,6 +51,7 @@ endif()
 # Defines
 add_definitions(
 	-DFNA3D_DRIVER_OPENGL
+	-DFNA3D_DRIVER_VULKAN
 )
 add_definitions(
 	-DMOJOSHADER_NO_VERSION_INCLUDE
@@ -80,10 +84,10 @@ add_library(FNA3D
 	# Internal Headers
 	src/FNA3D_CommandStream.h
 	src/FNA3D_Driver.h
-	src/FNA3D_Driver_OpenGL.h
-	src/FNA3D_Driver_OpenGL_glfuncs.h
 	src/FNA3D_Driver_ModernGL.h
 	src/FNA3D_Driver_ModernGL_glfuncs.h
+	src/FNA3D_Driver_OpenGL.h
+	src/FNA3D_Driver_OpenGL_glfuncs.h
 	src/FNA3D_Driver_Vulkan.h
 	src/FNA3D_Driver_Vulkan_device_funcs.h
 	src/FNA3D_Driver_Vulkan_global_funcs.h
