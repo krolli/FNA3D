@@ -92,6 +92,7 @@ typedef struct FNAVulkanImageData
 	VkDeviceMemory memory;
 	VkExtent2D dimensions;
 	VkImageLayout layout;
+	VkDeviceSize memorySize;
 } FNAVulkanImageData;
 
 typedef struct FNAVulkanFramebuffer
@@ -173,6 +174,7 @@ struct VulkanQuery {
 
 struct VulkanTexture {
 	FNAVulkanImageData *imageData;
+	VulkanBuffer *stagingBuffer;
 	uint8_t hasMipmaps;
 	int32_t width;
 	int32_t height;
@@ -194,6 +196,7 @@ static FNAVulkanImageData NullImageData;
 static VulkanTexture NullTexture =
 {
 	&NullImageData,
+	NULL,
 	0,
 	0,
 	0,
@@ -274,7 +277,7 @@ typedef struct FNAVulkanRenderer
 	VkCommandBuffer *commandBuffers;
 	uint32_t commandBufferCapacity;
 	uint32_t commandBufferCount;
-	uint8_t commandBufferBegunThisPass;
+	uint8_t commandBufferBegunThisFrame;
 
 	FNA3D_Vec4 clearColor;
 	float clearDepthValue;
@@ -580,11 +583,18 @@ static void GenerateVertexInputInfo(
 	uint32_t *attributeDescriptionCount
 );
 
-static void QueueImageLayoutTransition(
+static uint8_t CreateImageLayoutTransition(
 	FNAVulkanRenderer *renderer,
 	FNAVulkanImageData *imageData,
 	VkImageLayout targetLayout,
-	VkImageAspectFlags aspectMask
+	VkImageAspectFlags aspectMask,
+	VkImageMemoryBarrier *memoryBarrier
+);
+
+static void QueueImageLayoutTransition(
+	FNAVulkanRenderer *renderer,
+	FNAVulkanImageData *imageData,
+	VkImageMemoryBarrier imageMemoryBarrier
 );
 
 static void PerformImageLayoutTransitions(
@@ -2407,6 +2417,7 @@ static uint8_t CreateImage(
 		VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO
 	};
 
+	imageData->memorySize = memoryRequirements.size;
 	allocInfo.allocationSize = memoryRequirements.size;
 
 	if (
@@ -2508,6 +2519,9 @@ static VulkanTexture* CreateTexture(
 	FNAVulkanImageData *imageData = SDL_malloc(sizeof(FNAVulkanImageData));
 	SDL_memset(imageData, '\0', sizeof(FNAVulkanImageData));
 
+	VulkanBuffer *stagingBuffer = SDL_malloc(sizeof(VulkanBuffer));
+	SDL_memset(stagingBuffer, '\0', sizeof(VulkanBuffer));
+
 	result->imageData = imageData;
 
 	SurfaceFormatMapping surfaceFormatMapping = XNAToVK_SurfaceFormat[format];
@@ -2540,14 +2554,23 @@ static VulkanTexture* CreateTexture(
 	result->maxMipmapLevel = 0; /* FIXME: ???? */
 	result->lodBias = 0.0f;
 	result->next = NULL;
+
+	result->stagingBuffer = CreateBuffer(
+		renderer,
+		FNA3D_BUFFERUSAGE_NONE, /* arbitrary */
+		result->imageData->memorySize,
+		VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+	);
+
 	return result;
 }
 
-static void QueueImageLayoutTransition(
+static uint8_t CreateImageLayoutTransition(
 	FNAVulkanRenderer *renderer,
 	FNAVulkanImageData *imageData,
 	VkImageLayout targetLayout,
-	VkImageAspectFlags aspectMask
+	VkImageAspectFlags aspectMask,
+	VkImageMemoryBarrier *memoryBarrier
 ) {
 	if (imageData->layout != targetLayout)
 	{
@@ -2610,7 +2633,7 @@ static void QueueImageLayoutTransition(
 					VkImageLayoutString(barrier.oldLayout),
 					"Invalid old layout for image layout transition"
 				);
-				return;
+				return 0;
 		}
 
 		switch (barrier.newLayout)
@@ -2653,25 +2676,36 @@ static void QueueImageLayoutTransition(
 					VkImageLayoutString(barrier.newLayout),
 					"Invalid new layout for image layout transition"
 				);
-				return;
+				return 0;
 		}
 
-		if (renderer->imageMemoryBarrierCount >= renderer->imageMemoryBarrierCapacity)
-		{
-			renderer->imageMemoryBarrierCapacity *= 2;
-
-			renderer->imageMemoryBarriers = SDL_realloc(
-				renderer->imageMemoryBarriers,
-				sizeof(VkImageMemoryBarrier) *
-				renderer->imageMemoryBarrierCapacity
-			);
-		}
-
-		renderer->imageMemoryBarriers[renderer->imageMemoryBarrierCount] = barrier;
-		renderer->imageMemoryBarrierCount++;
-
-		imageData->layout = targetLayout;
+		*memoryBarrier = barrier;
+		return 1;
 	}
+
+	return 0;
+}
+
+static void QueueImageLayoutTransition(
+	FNAVulkanRenderer *renderer,
+	FNAVulkanImageData *imageData,
+	VkImageMemoryBarrier imageMemoryBarrier
+) {
+	if (renderer->imageMemoryBarrierCount >= renderer->imageMemoryBarrierCapacity)
+	{
+		renderer->imageMemoryBarrierCapacity *= 2;
+
+		renderer->imageMemoryBarriers = SDL_realloc(
+			renderer->imageMemoryBarriers,
+			sizeof(VkImageMemoryBarrier) *
+			renderer->imageMemoryBarrierCapacity
+		);
+	}
+
+	renderer->imageMemoryBarriers[renderer->imageMemoryBarrierCount] = imageMemoryBarrier;
+	renderer->imageMemoryBarrierCount++;
+
+	imageData->layout = imageMemoryBarrier.newLayout;
 }
 
 static void PerformImageLayoutTransitions(
@@ -3512,7 +3546,7 @@ static uint8_t AllocateAndBeginCommandBuffer(
 		return 0;
 	}
 
-	renderer->commandBufferBegunThisPass = 1;
+	renderer->commandBufferBegunThisFrame = 1;
 
 	return 1;
 }
@@ -3794,6 +3828,7 @@ void VULKAN_SwapBuffers(
 	
 	MOJOSHADER_vkEndFrame();
 
+	renderer->commandBufferBegunThisFrame = 0;
 	renderer->frameInProgress = 0;
 }
 
@@ -4427,12 +4462,23 @@ void VULKAN_VerifySampler(
 		renderer->samplerNeedsUpdate[textureIndex] = 1;
 	}
 
-	QueueImageLayoutTransition(
-		renderer,
-		vulkanTexture->imageData,
-		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		VK_IMAGE_ASPECT_COLOR_BIT
-	);
+	VkImageMemoryBarrier layoutTransition;
+	
+	if (
+		CreateImageLayoutTransition(
+			renderer,
+			vulkanTexture->imageData,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			&layoutTransition
+		)
+	) {
+		QueueImageLayoutTransition(
+			renderer,
+			vulkanTexture->imageData,
+			layoutTransition
+		);
+	}
 }
 
 void VULKAN_VerifyVertexSampler(
@@ -4534,11 +4580,15 @@ static void DestroyBuffer(
 		prev
 	);
 
-	/* TODO: destroy memory */
-
 	renderer->vkDestroyBuffer(
 		renderer->logicalDevice,
 		vulkanBuffer->handle,
+		NULL
+	);
+
+	renderer->vkFreeMemory(
+		renderer->logicalDevice,
+		vulkanBuffer->deviceMemory,
 		NULL
 	);
 
@@ -4831,7 +4881,114 @@ void VULKAN_SetTextureData2D(
 	void* data,
 	int32_t dataLength
 ) {
-	/* TODO */
+	FNAVulkanRenderer *renderer = (FNAVulkanRenderer*) driverData;
+	VulkanTexture *vulkanTexture = (VulkanTexture*) texture;
+
+	VkBufferCreateInfo bufferCreateInfo = {
+		VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
+	};
+	bufferCreateInfo.size = dataLength;
+	bufferCreateInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	bufferCreateInfo.queueFamilyIndexCount = 1;
+	bufferCreateInfo.pQueueFamilyIndices = &renderer->queueFamilyIndices.graphicsFamily;
+
+	VulkanBuffer *stagingBuffer = vulkanTexture->stagingBuffer;
+
+	void *stagingData;
+	renderer->vkMapMemory(
+		renderer->logicalDevice,
+		stagingBuffer->deviceMemory,
+		stagingBuffer->internalOffset,
+		stagingBuffer->size,
+		0,
+		&stagingData
+	);
+
+	SDL_memcpy(stagingData, data, stagingBuffer->size);
+
+	renderer->vkUnmapMemory(
+		renderer->logicalDevice,
+		stagingBuffer->deviceMemory
+	);
+
+	VkBufferImageCopy imageCopy;
+	imageCopy.imageExtent.width = w;
+	imageCopy.imageExtent.height = h;
+	imageCopy.imageExtent.depth = 1;
+	imageCopy.imageOffset.x = x;
+	imageCopy.imageOffset.y = y;
+	imageCopy.imageOffset.z = 0;
+	imageCopy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	imageCopy.imageSubresource.baseArrayLayer = 0;
+	imageCopy.imageSubresource.layerCount = 1;
+	imageCopy.imageSubresource.mipLevel = 0;
+	imageCopy.bufferOffset = 0;
+	imageCopy.bufferRowLength = w;
+	imageCopy.bufferImageHeight = h;
+
+	if (!renderer->commandBufferBegunThisFrame)
+	{
+		AllocateAndBeginCommandBuffer(renderer);
+	}
+
+	VkImageMemoryBarrier layoutTransition;
+
+	if(
+		CreateImageLayoutTransition(
+			renderer,
+			vulkanTexture->imageData,
+			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_ASPECT_COLOR_BIT,
+			&layoutTransition
+		)
+	) {
+		uint8_t renderPassWasInProgress = renderer->renderPassInProgress;
+
+		if (renderPassWasInProgress)
+		{
+			EndPass(renderer);
+		}
+
+		// VkBufferMemoryBarrier bufferBarrier = {
+		// 	VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO
+		// };
+		// bufferBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+		// bufferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+		// bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		// bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		// bufferBarrier.buffer = stagingBuffer->handle;
+
+		/* FIXME: batch this */
+		renderer->vkCmdPipelineBarrier(
+			renderer->commandBuffers[renderer->commandBufferCount - 1],
+			VK_PIPELINE_STAGE_HOST_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT,
+			0,
+			0,
+			NULL,
+			0,
+			NULL,
+			1,
+			&layoutTransition
+		);
+
+		vulkanTexture->imageData->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+		if (renderPassWasInProgress)
+		{
+			BeginRenderPass(renderer);
+		}
+	}
+
+	renderer->vkCmdCopyBufferToImage(
+		renderer->commandBuffers[renderer->commandBufferCount - 1],
+		stagingBuffer->handle,
+		vulkanTexture->imageData->image,
+		vulkanTexture->imageData->layout,
+		1,
+		&imageCopy
+	);
 }
 
 void VULKAN_SetTextureData3D(
@@ -7237,7 +7394,6 @@ FNA3D_Device* VULKAN_CreateDevice(
 
 	renderer->needNewRenderPass = 1;
 	renderer->frameInProgress = 0;
-	renderer->commandBufferBegunThisPass = 0;
 
 	/* Set up query pool */
 	VkQueryPoolCreateInfo queryPoolCreateInfo = { VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
